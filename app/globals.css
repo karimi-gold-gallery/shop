@@ -1,26 +1,155 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "tw-animate-css";
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-navy: var(--navy);
+  --color-navy-foreground: var(--navy-foreground);
+  --color-gold: var(--gold);
+  --font-sans: var(--font-vazirmatn), ui-sans-serif, system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  /* Main site color: modern light beige-goldish */
+  --background: #f7f1e6;
+  --foreground: #2a241c;
+
+  --card: #fffdf8;
+  --card-foreground: #2a241c;
+
+  --popover: #fffdf8;
+  --popover-foreground: #2a241c;
+
+  /* Primary action color: refined gold */
+  --primary: #b08843;
+  --primary-foreground: #fffdf8;
+
+  /* Secondary: the beige-goldish main surface tone */
+  --secondary: #ece0c8;
+  --secondary-foreground: #2a241c;
+
+  --muted: #efe7d6;
+  --muted-foreground: #756651;
+
+  --accent: #e3d3b3;
+  --accent-foreground: #2a241c;
+
+  --destructive: #b3261e;
+  --destructive-foreground: #fffdf8;
+
+  --border: #e0d3bb;
+  --input: #e0d3bb;
+  --ring: #b08843;
+
+  /* The requested deep navy, used as a restrained accent */
+  --navy: #01034e;
+  --navy-foreground: #f7f1e6;
+
+  --gold: #c9a14a;
+
+  --radius: 0.85rem;
+}
+
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle gold scrollbar for the beige theme */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: #cdb88a;
+  border-radius: 9999px;
+  border: 2px solid var(--secondary);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .navy-gradient {
+    background-image: linear-gradient(135deg, #01034e 0%, #0a1268 50%, #01034e 100%);
+  }
+  .gold-gradient {
+    background-image: linear-gradient(120deg, #c9a14a 0%, #b08843 45%, #8a6a2e 100%);
+  }
+  .beige-texture {
+    background-image: radial-gradient(circle at 20% 20%, rgba(201, 161, 74, 0.08), transparent 40%),
+      radial-gradient(circle at 80% 0%, rgba(1, 3, 78, 0.05), transparent 35%);
+  }
+}
+
+/* Jalali (Shamsi) date picker theming to match the beige-gold palette */
+.rmdp-wrapper {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 10px 30px rgba(1, 3, 78, 0.12) !important;
+  direction: rtl;
+}
+.rmdp-wrapper .rmdp-top-class,
+.rmdp-wrapper .rmdp-header,
+.rmdp-wrapper .rmdp-week,
+.rmdp-wrapper .rmdp-week-day {
+  color: var(--foreground);
+}
+.rmdp-day:not(.rmdp-disabled):not(.rmdp-selected):hover {
+  background-color: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+}
+.rmdp-day.rmdp-selected span:not(.highlight) {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  box-shadow: 0 0 0 1px var(--primary) !important;
+}
+.rmdp-day.rmdp-today span {
+  border: 1px solid var(--primary) !important;
+  color: var(--primary) !important;
+}
+.rmdp-arrow-container:hover {
+  background-color: var(--secondary) !important;
+}
+.rmdp-arrow {
+  border-color: var(--navy) !important;
+}
+.rmdp-day.rmdp-disabled {
+  color: var(--muted-foreground) !important;
+  opacity: 0.5;
 }

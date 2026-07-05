@@ -1,0 +1,104 @@
+import Link from "next/link";
+import { Package, FolderTree, ClipboardList, Clock, CheckCircle2, TrendingUp } from "lucide-react";
+import type { Metadata } from "next";
+
+import { prisma } from "@/lib/prisma";
+import { getGoldPricePerGram } from "@/lib/gold-price";
+import { toPersianDigits, formatToman } from "@/lib/format";
+import { GoldPriceForm } from "@/components/gold-price-form";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = { title: "داشبورد مدیریت" };
+
+export default async function AdminDashboard() {
+  const [productCount, categoryCount, orderCount, pendingOrders, paidOrders, finishedRevenue, goldPrice] = await Promise.all([
+    prisma.product.count(),
+    prisma.category.count(),
+    prisma.order.count(),
+    prisma.order.count({ where: { status: "PENDING" } }),
+    prisma.order.count({ where: { status: "PAID" } }),
+    prisma.order.aggregate({ where: { status: { in: ["PAID", "FINISHED"] } }, _sum: { totalPrice: true } }),
+    getGoldPricePerGram(),
+  ]);
+
+  const revenue = finishedRevenue._sum.totalPrice ?? 0;
+
+  const stats = [
+    { label: "محصولات", value: toPersianDigits(productCount), icon: Package, href: "/admin/products" },
+    { label: "دسته‌بندی‌ها", value: toPersianDigits(categoryCount), icon: FolderTree, href: "/admin/categories" },
+    { label: "کل سفارش‌ها", value: toPersianDigits(orderCount), icon: ClipboardList, href: "/admin/orders" },
+    { label: "سفارش‌های در انتظار", value: toPersianDigits(pendingOrders), icon: Clock, href: "/admin/orders" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-navy">داشبورد</h1>
+        <p className="text-sm text-muted-foreground">نمای کلی از وضعیت گالری کریمی</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((s) => (
+          <Link key={s.label} href={s.href}>
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="flex items-center gap-3 p-4">
+                <span className="grid size-10 place-items-center rounded-lg bg-primary/15 text-primary">
+                  <s.icon className="size-5" />
+                </span>
+                <div>
+                  <p className="text-2xl font-extrabold text-navy">{s.value}</p>
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-navy">
+              <TrendingUp className="size-5 text-primary" />
+              قیمت روز طلا
+            </CardTitle>
+            <CardDescription>
+              این قیمت پایه محاسبه قیمت محصولات است. در آینده توسط API و cron job به‌روز می‌شود.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <GoldPriceForm currentPrice={goldPrice} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-navy">
+              <CheckCircle2 className="size-5 text-emerald-600" />
+              وضعیت سفارش‌ها
+            </CardTitle>
+            <CardDescription>خلاصه سفارش‌ها و درآمد</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg bg-secondary/50 p-3">
+              <span className="text-sm text-muted-foreground">سفارش‌های در انتظار تماس</span>
+              <span className="font-bold text-navy">{toPersianDigits(pendingOrders)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-secondary/50 p-3">
+              <span className="text-sm text-muted-foreground">سفارش‌های پرداخت‌شده</span>
+              <span className="font-bold text-navy">{toPersianDigits(paidOrders)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
+              <span className="text-sm text-emerald-700">درآمد تسویه‌شده</span>
+              <span className="font-bold text-emerald-700">{toPersianDigits(formatToman(revenue))}</span>
+            </div>
+            <Button asChild variant="navy" className="w-full">
+              <Link href="/admin/orders">مدیریت سفارش‌ها</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
