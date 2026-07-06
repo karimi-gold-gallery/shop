@@ -5,16 +5,18 @@ import { ArrowLeft, Diamond, ShieldCheck, Truck, Sparkles, MapPin } from "lucide
 import { getProducts, getCategories } from "@/lib/products";
 import { getGoldPricePerGram } from "@/lib/gold-price";
 import { getShopInfo } from "@/lib/shop";
+import { getCurrentUser } from "@/lib/auth";
 import { toPersianDigits, formatNumber } from "@/lib/format";
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default async function HomePage() {
-  const [goldPrice, featured, categories] = await Promise.all([
+  const [goldPrice, featured, categories, user] = await Promise.all([
     getGoldPricePerGram(),
     getProducts({ limit: 8 }),
     getCategories(),
+    getCurrentUser(),
   ]);
 
   const { slogan, experience, address } = getShopInfo();
@@ -48,9 +50,11 @@ export default async function HomePage() {
                   <ArrowLeft className="size-4" />
                 </Link>
               </Button>
-              <Button asChild variant="navy" size="lg">
-                <Link href="/login">ورود / ثبت‌نام</Link>
-              </Button>
+              {!user && (
+                <Button asChild variant="navy" size="lg">
+                  <Link href="/login">ورود / ثبت‌نام</Link>
+                </Button>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-6 pt-4 text-sm">

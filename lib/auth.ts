@@ -88,3 +88,21 @@ export async function requireOnboardedUser(): Promise<SafeUser> {
   if (!user.onboarded) redirect("/onboarding");
   return user;
 }
+
+export function getPostAuthRedirectPath(user: SafeUser): string {
+  if (user.role === "ADMIN") return "/admin";
+  if (!user.onboarded) return "/onboarding";
+  return "/";
+}
+
+export async function redirectIfAuthenticated(): Promise<void> {
+  const user = await getCurrentUser();
+  if (user) redirect(getPostAuthRedirectPath(user));
+}
+
+export async function requireIncompleteOnboarding(): Promise<SafeUser> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.onboarded) redirect(getPostAuthRedirectPath(user));
+  return user;
+}
