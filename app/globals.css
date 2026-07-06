@@ -83,6 +83,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+[data-sonner-toaster] {
+  font-family: var(--font-sans) !important;
+}
+
 /* Subtle gold scrollbar for the beige theme */
 ::-webkit-scrollbar {
   width: 10px;

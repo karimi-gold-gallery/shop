@@ -1,19 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 
 export function SearchBox({ initialValue = "" }: { initialValue?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [q, setQ] = useState(initialValue);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const params = new URLSearchParams(searchParams.toString());
     const term = q.trim();
-    router.push(term ? `/products?q=${encodeURIComponent(term)}` : "/products");
+    if (term) params.set("q", term);
+    else params.delete("q");
+    const qs = params.toString();
+    router.push(qs ? `/products?${qs}` : "/products");
   }
 
   return (

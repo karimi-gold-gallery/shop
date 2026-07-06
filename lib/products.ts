@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { computeProductPrice } from "@/lib/gold-price";
+import type { ProductSearchFilters, ProductSort } from "@/lib/product-search";
 
 export const productSelect = {
   id: true,
@@ -32,15 +34,26 @@ export type ProductCardData = {
 export async function getProducts(opts: {
   q?: string;
   categorySlug?: string;
+  categorySlugs?: string[];
+  sort?: ProductSort;
+  goldPricePerGram?: number;
   limit?: number;
   onlyActive?: boolean;
 }): Promise<ProductCardData[]> {
-  const { q, categorySlug, limit, onlyActive = true } = opts;
+  const {
+    q,
+    categorySlug,
+    categorySlugs = categorySlug ? [categorySlug] : [],
+    sort = "newest",
+    goldPricePerGram,
+    limit,
+    onlyActive = true,
+  } = opts;
 
   const where: Prisma.ProductWhereInput = {};
   if (onlyActive) where.active = true;
-  if (categorySlug) {
-    where.category = { slug: categorySlug };
+  if (categorySlugs.length > 0) {
+    where.category = { slug: { in: categorySlugs } };
   }
   if (q && q.trim()) {
     const term = q.trim();
@@ -50,11 +63,41 @@ export async function getProducts(opts: {
     ];
   }
 
-  return prisma.product.findMany({
+  const products = await prisma.product.findMany({
     where,
     select: productSelect,
     orderBy: { createdAt: "desc" },
     take: limit,
+  });
+
+  const needsPriceProcessing =
+    goldPricePerGram !== undefined && sort !== "newest";
+
+  if (!needsPriceProcessing) return products;
+
+  let priced = products.map((product) => ({
+    product,
+    price: computeProductPrice(product.weight, product.wage, goldPricePerGram!),
+  }));
+
+  if (sort === "price-asc") {
+    priced.sort((a, b) => a.price - b.price);
+  } else if (sort === "price-desc") {
+    priced.sort((a, b) => b.price - a.price);
+  }
+
+  return priced.map(({ product }) => product);
+}
+
+export async function getFilteredProducts(
+  filters: ProductSearchFilters,
+  goldPricePerGram: number
+): Promise<ProductCardData[]> {
+  return getProducts({
+    q: filters.q,
+    categorySlugs: filters.categorySlugs,
+    sort: filters.sort,
+    goldPricePerGram,
   });
 }
 

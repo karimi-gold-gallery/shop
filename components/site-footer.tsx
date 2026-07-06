@@ -35,8 +35,8 @@ export function SiteFooter() {
           <h3 className="font-semibold mb-3 text-gold">دسترسی سریع</h3>
           <ul className="space-y-2 text-sm text-navy-foreground/80">
             <li><Link href="/products" className="hover:text-gold">محصولات</Link></li>
-            <li><Link href="/products?category=ring" className="hover:text-gold">انگشتر</Link></li>
-            <li><Link href="/products?category=necklace" className="hover:text-gold">گردنبند</Link></li>
+            <li><Link href="/about" className="hover:text-gold">درباره ما</Link></li>
+            <li><Link href="/contact" className="hover:text-gold">تماس با ما</Link></li>
             <li><Link href="/cart" className="hover:text-gold">سبد خرید</Link></li>
             <li><Link href="/profile" className="hover:text-gold">پروفایل</Link></li>
           </ul>

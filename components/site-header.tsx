@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Diamond, ShoppingBag, User, Menu } from "lucide-react";
+import { Diamond, ShoppingBag, User } from "lucide-react";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -8,7 +8,9 @@ import { getGoldPricePerGram } from "@/lib/gold-price";
 import { toPersianDigits, formatNumber } from "@/lib/format";
 import { SearchBox } from "@/components/search-box";
 import { UserMenu } from "@/components/user-menu";
+import { DesktopNav, MobileNav } from "@/components/main-nav";
 import { Button } from "@/components/ui/button";
+import { getCategories } from "@/lib/products";
 
 export async function GoldPriceStrip() {
   const price = await getGoldPricePerGram();
@@ -27,19 +29,11 @@ export async function GoldPriceStrip() {
 }
 
 export async function SiteHeader() {
-  const user = await getCurrentUser();
+  const [user, categories] = await Promise.all([getCurrentUser(), getCategories()]);
   let cartCount = 0;
   if (user) {
     cartCount = await prisma.cartItem.count({ where: { userId: user.id } });
   }
-
-  const navLinks = [
-    { href: "/", label: "خانه" },
-    { href: "/products", label: "محصولات" },
-    { href: "/products?category=ring", label: "انگشتر" },
-    { href: "/products?category=necklace", label: "گردنبند" },
-    { href: "/products?category=earrings", label: "گوشواره" },
-  ];
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -62,23 +56,14 @@ export async function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-1 text-sm">
-          {navLinks.map((l) => (
-            <Link
-              key={l.label}
-              href={l.href}
-              className="rounded-md px-3 py-2 text-foreground/80 hover:bg-secondary hover:text-navy transition-colors"
-            >
-              {l.label}
-            </Link>
-          ))}
-        </nav>
+        <DesktopNav categories={categories} />
 
         <div className="flex-1 max-w-md hidden md:block">
           <SearchBox />
         </div>
 
         <div className="mr-auto flex items-center gap-1.5 sm:gap-2">
+          <MobileNav categories={categories} />
           <Button asChild variant="ghost" size="icon" className="relative" aria-label="سبد خرید">
             <Link href="/cart">
               <ShoppingBag className="size-5" />
@@ -101,11 +86,6 @@ export async function SiteHeader() {
             </Button>
           )}
 
-          <Button asChild variant="ghost" size="icon" className="lg:hidden" aria-label="منو">
-            <Link href="/products">
-              <Menu className="size-5" />
-            </Link>
-          </Button>
         </div>
       </div>
 
