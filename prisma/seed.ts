@@ -1,10 +1,10 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL || "file:./db.sqlite",
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
 });
 const prisma = new PrismaClient({ adapter });
 
@@ -91,18 +91,102 @@ async function main() {
   }
 
   const products = [
-    { name: "انگشتر طلای سلطنتی", category: "ring", variant: "ring", weight: 3.2, wage: 850000, description: "انگشتر طلای ۱۸ عیار با طراحی سلطنتی و سنگ بدلی ظریف." },
-    { name: "انگشتر طلای مردانه ساده", category: "ring", variant: "ring", weight: 5.5, wage: 1200000, description: "انگشتر طلای مردانه با طراحی مینیمال و وزن مناسب." },
-    { name: "گردنبند طلای قلب", category: "necklace", variant: "necklace", weight: 4.8, wage: 1500000, description: "گردنبند طلای قلب‌شکل مناسب برای هدیه." },
-    { name: "گردنبند طلای الماس‌کار", category: "necklace", variant: "necklace", weight: 6.1, wage: 2100000, description: "گردنبند طلای الماس‌کار با ظرافت بالا." },
-    { name: "دستبند طلای زنانه ظریف", category: "bracelet", variant: "bracelet", weight: 7.4, wage: 1800000, description: "دستبند طلای ظریف با طراحی دل‌نشین." },
-    { name: "دستبند طلای دو ردیف", category: "bracelet", variant: "bracelet", weight: 11.2, wage: 2600000, description: "دستبند طلای دو ردیف، شیک و مناسب مجالس." },
-    { name: "النگوی طلای کلاسیک", category: "bangle", variant: "bangle", weight: 14.5, wage: 2400000, description: "النگوی طلای کلاسیک با وزن بالا و درخشش عالی." },
-    { name: "النگوی طلای مدرن", category: "bangle", variant: "bangle", weight: 12.8, wage: 2200000, description: "النگوی طلای مدرن با طراحی متفاوت." },
-    { name: "گوشواره طلای گل", category: "earrings", variant: "earrings", weight: 2.9, wage: 950000, description: "گوشواره طلای گل‌شکل، سبک و زیبا." },
-    { name: "گوشواره طلای چلچراغ", category: "earrings", variant: "earrings", weight: 4.2, wage: 1300000, description: "گوشواره طلای چلچراغی مجلسی." },
-    { name: "زنجیر طلای ژول‌کار", category: "chain", variant: "chain", weight: 9.6, wage: 1700000, description: "زنجیر طلای ژول‌کار درجه یک." },
-    { name: "زنجیر طلای ونیزی", category: "chain", variant: "chain", weight: 13.3, wage: 2500000, description: "زنجیر طلای ونیزی با طراحی خاص." },
+    {
+      name: "انگشتر طلای سلطنتی",
+      category: "ring",
+      variant: "ring",
+      weight: 3.2,
+      wage: 850000,
+      description: "انگشتر طلای ۱۸ عیار با طراحی سلطنتی و سنگ بدلی ظریف.",
+    },
+    {
+      name: "انگشتر طلای مردانه ساده",
+      category: "ring",
+      variant: "ring",
+      weight: 5.5,
+      wage: 1200000,
+      description: "انگشتر طلای مردانه با طراحی مینیمال و وزن مناسب.",
+    },
+    {
+      name: "گردنبند طلای قلب",
+      category: "necklace",
+      variant: "necklace",
+      weight: 4.8,
+      wage: 1500000,
+      description: "گردنبند طلای قلب‌شکل مناسب برای هدیه.",
+    },
+    {
+      name: "گردنبند طلای الماس‌کار",
+      category: "necklace",
+      variant: "necklace",
+      weight: 6.1,
+      wage: 2100000,
+      description: "گردنبند طلای الماس‌کار با ظرافت بالا.",
+    },
+    {
+      name: "دستبند طلای زنانه ظریف",
+      category: "bracelet",
+      variant: "bracelet",
+      weight: 7.4,
+      wage: 1800000,
+      description: "دستبند طلای ظریف با طراحی دل‌نشین.",
+    },
+    {
+      name: "دستبند طلای دو ردیف",
+      category: "bracelet",
+      variant: "bracelet",
+      weight: 11.2,
+      wage: 2600000,
+      description: "دستبند طلای دو ردیف، شیک و مناسب مجالس.",
+    },
+    {
+      name: "النگوی طلای کلاسیک",
+      category: "bangle",
+      variant: "bangle",
+      weight: 14.5,
+      wage: 2400000,
+      description: "النگوی طلای کلاسیک با وزن بالا و درخشش عالی.",
+    },
+    {
+      name: "النگوی طلای مدرن",
+      category: "bangle",
+      variant: "bangle",
+      weight: 12.8,
+      wage: 2200000,
+      description: "النگوی طلای مدرن با طراحی متفاوت.",
+    },
+    {
+      name: "گوشواره طلای گل",
+      category: "earrings",
+      variant: "earrings",
+      weight: 2.9,
+      wage: 950000,
+      description: "گوشواره طلای گل‌شکل، سبک و زیبا.",
+    },
+    {
+      name: "گوشواره طلای چلچراغ",
+      category: "earrings",
+      variant: "earrings",
+      weight: 4.2,
+      wage: 1300000,
+      description: "گوشواره طلای چلچراغی مجلسی.",
+    },
+    {
+      name: "زنجیر طلای ژول‌کار",
+      category: "chain",
+      variant: "chain",
+      weight: 9.6,
+      wage: 1700000,
+      description: "زنجیر طلای ژول‌کار درجه یک.",
+    },
+    {
+      name: "زنجیر طلای ونیزی",
+      category: "chain",
+      variant: "chain",
+      weight: 13.3,
+      wage: 2500000,
+      description: "زنجیر طلای ونیزی با طراحی خاص.",
+    },
   ];
 
   for (const p of products) {
