@@ -1,5 +1,27 @@
 import { z } from "zod";
 
+import { toEnglishDigits } from "@/lib/format";
+
+function withEnglishDigits(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  return toEnglishDigits(value);
+}
+
+export const phoneSchema = z.preprocess(
+  withEnglishDigits,
+  z
+    .string()
+    .trim()
+    .regex(/^09\d{9}$/, "شماره موبایل باید با ۰۹ شروع و ۱۱ رقم باشد"),
+);
+
+const optionalDigitString = z.preprocess(
+  withEnglishDigits,
+  z.string().trim().optional().or(z.literal("")),
+);
+
+const englishNumber = z.preprocess(withEnglishDigits, z.coerce.number());
+
 export const loginSchema = z.object({
   username: z.string().trim().min(3, "نام کاربری حداقل ۳ کاراکتر باشد"),
   password: z.string().min(6, "رمز عبور حداقل ۶ کاراکتر باشد"),
@@ -26,11 +48,7 @@ export const onboardingSchema = z.object({
   lastName: z.string().trim().min(2, "نام خانوادگی را وارد کنید"),
   birthDate: z.string().trim().min(4, "تاریخ تولد را انتخاب کنید"),
   gender: z.enum(["MALE", "FEMALE"], { message: "جنسیت را انتخاب کنید" }),
-  phone: z
-    .string()
-    .trim()
-    .min(11, "شماره موبایل معتبر وارد کنید")
-    .regex(/^09\d{9}$/, "شماره موبایل باید با ۰۹ شروع و ۱۱ رقم باشد"),
+  phone: phoneSchema,
 });
 
 export const profileSchema = z.object({
@@ -38,15 +56,11 @@ export const profileSchema = z.object({
   lastName: z.string().trim().min(2, "نام خانوادگی را وارد کنید"),
   birthDate: z.string().trim().min(4, "تاریخ تولد را وارد کنید"),
   gender: z.enum(["MALE", "FEMALE"], { message: "جنسیت را انتخاب کنید" }),
-  phone: z
-    .string()
-    .trim()
-    .min(11, "شماره موبایل معتبر وارد کنید")
-    .regex(/^09\d{9}$/, "شماره موبایل باید با ۰۹ شروع و ۱۱ رقم باشد"),
-  nationalCode: z.string().trim().optional().or(z.literal("")),
+  phone: phoneSchema,
+  nationalCode: optionalDigitString,
   city: z.string().trim().optional().or(z.literal("")),
   address: z.string().trim().optional().or(z.literal("")),
-  postalCode: z.string().trim().optional().or(z.literal("")),
+  postalCode: optionalDigitString,
 });
 
 export const categorySchema = z.object({
@@ -57,8 +71,8 @@ export const categorySchema = z.object({
 export const productSchema = z.object({
   name: z.string().trim().min(2, "نام محصول الزامی است"),
   description: z.string().trim().optional().or(z.literal("")),
-  weight: z.coerce.number().positive("وزن باید بیشتر از صفر باشد"),
-  wage: z.coerce.number().min(0, "اجرت نمی‌تواند منفی باشد"),
+  weight: englishNumber.pipe(z.number().positive("وزن باید بیشتر از صفر باشد")),
+  wage: englishNumber.pipe(z.number().min(0, "اجرت نمی‌تواند منفی باشد")),
   categoryId: z.string().min(1, "دسته‌بندی را انتخاب کنید"),
   active: z.coerce.boolean().optional().default(true),
 });
@@ -66,7 +80,7 @@ export const productSchema = z.object({
 export const orderStatusSchema = z.enum(["PENDING", "PAID", "FINISHED", "CANCELLED"]);
 
 export const goldPriceSchema = z.object({
-  price: z.coerce.number().positive("قیمت طلا باید بیشتر از صفر باشد"),
+  price: englishNumber.pipe(z.number().positive("قیمت طلا باید بیشتر از صفر باشد")),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

@@ -1,0 +1,584 @@
+# گالری طلا و جواهر کریمی — Project Documentation
+
+Complete technical and business overview of **karimi-gold-gallery**. Reading this document should be enough to understand what the product does, how it is built, and where everything lives in the codebase.
+
+---
+
+## 1. What this project is
+
+**Karimi Gold Gallery** (گالری طلا و جواهر کریمی) is a Persian, RTL e-commerce web app for a gold and jewelry shop.
+
+Customers can:
+
+- Browse 18k gold jewelry by category
+- See live prices based on the current gold price per gram plus making wage (اجرت)
+- Add items to a cart, place an order, and receive an order code
+- Contact the gallery by phone to complete payment and pickup/delivery
+
+There is **no online payment gateway**. Checkout creates a pending order; fulfillment happens offline after the customer calls the shop with their order code.
+
+Admins can:
+
+- Manage categories and products (including images)
+- Update the gold price per gram
+- View and update order statuses
+
+---
+
+## 2. Tech stack
+
+| Layer | Technology |
+|--------|------------|
+| Framework | **Next.js 16** (App Router) |
+| UI | **React 19**, Tailwind CSS 4, Radix UI, CVA, lucide-react |
+| Language | TypeScript |
+| Validation | Zod 4 |
+| Database | **PostgreSQL** via **Prisma 7** (`@prisma/adapter-pg` + `pg`) |
+| Auth | Custom cookie sessions + **bcryptjs** |
+| Dates | Jalali via `react-multi-date-picker` |
+| Toasts | sonner |
+| Font | **Vazirmatn** (`next/font/google`) |
+
+### Scripts (`package.json`)
+
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Local development |
+| `npm run build` / `start` | Production build & serve |
+| `npm run lint` | ESLint |
+| `npm run db:push` | Push Prisma schema to DB |
+| `npm run seed` | Seed admin, categories, sample products, gold price |
+| `postinstall` | `prisma generate` |
+
+### Notable config
+
+- `next.config.ts`: Turbopack root pinned; Server Actions body limit **10mb** (product image uploads)
+- `prisma.config.ts`: schema path, migrations, seed command, `DATABASE_URL`
+- No `middleware.ts` — auth is enforced in layouts and server helpers
+
+---
+
+## 3. Business model & pricing
+
+### Core idea
+
+Products are priced dynamically from:
+
+1. **Weight** (grams of gold)
+2. **Current gold price per gram** (تومان) — store-wide setting
+3. **Wage / making charge** (اجرت ساخت) — per product, in تومان
+
+### Formula
+
+```text
+unitPrice = weight × goldPricePerGram + wage
+lineTotal = unitPrice × quantity
+```
+
+Implemented in `lib/gold-price.ts` as `computeProductPrice(weight, wage, goldPricePerGram)`.
+
+### Gold price
+
+- Stored in `Setting` with key `goldPricePerGram`
+- Default: **4,500,000** تومان per gram (`DEFAULT_GOLD_PRICE_PER_GRAM`)
+- Editable in admin dashboard via `GoldPriceForm` → `updateGoldPriceAction`
+- Shown in the site header strip
+- Code comments note a future API/cron for automatic updates
+
+### Order snapshots
+
+When an order is placed, the system **freezes** prices into the order:
+
+- Order-level: `goldPrice`, `totalGrams`, `totalWage`, `totalPrice`
+- Line-level: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`
+
+Later gold-price changes do **not** change historical orders.
+
+### Order codes
+
+Format: `KG-######` (e.g. first order → `KG-100001`)
+
+```ts
+// lib/orders.ts
+`KG-${String(100000 + orderCount + 1).slice(0, 6)}`
+```
+
+Generated from current order count (not UUID). Concurrent creates could theoretically collide; acceptable for current scale.
+
+### Order statuses
+
+| Status | Meaning (typical UI) |
+|--------|----------------------|
+| `PENDING` | Default after checkout — waiting for customer contact |
+| `PAID` | Payment confirmed |
+| `FINISHED` | Completed / delivered |
+| `CANCELLED` | Cancelled |
+
+Admin dashboard revenue sums `totalPrice` for orders with status `PAID` or `FINISHED`.
+
+### Fulfillment flow
+
+1. Customer places order → status `PENDING`, cart cleared
+2. Customer is shown order code + shop contact on `/orders/[code]`
+3. Customer calls the gallery and references the code
+4. Admin updates status through the admin order UI
+
+---
+
+## 4. User roles & auth
+
+### Roles
+
+Stored as string on `User.role` (not Prisma enums):
+
+| Role | Who |
+|------|-----|
+| `CUSTOMER` | Default on registration |
+| `ADMIN` | Seeded admin; full admin panel |
+
+### Session model
+
+| Detail | Value |
+|--------|--------|
+| Cookie name | `karimi_session` |
+| Cookie value | 32-byte hex token |
+| DB | `Session` row with `token`, `userId`, `expiresAt` |
+| TTL | **30 days** |
+| Flags | `httpOnly`, `sameSite: "lax"`, `secure` in production, `path: "/"` |
+
+Core helpers live in `lib/auth.ts`:
+
+| Function | Behavior |
+|----------|----------|
+| `hashPassword` / `verifyPassword` | bcrypt cost 10 |
+| `createSession` | Create DB session + set cookie |
+| `getCurrentUser` | Resolve cookie → user (or null); purge expired |
+| `signOut` | Delete session + cookie |
+| `requireUser` | Redirect to `/login` if anonymous |
+| `requireAdmin` | Non-admin → `/` |
+| `requireOnboardedUser` | Not onboarded → `/onboarding` |
+| `requireIncompleteOnboarding` | Guard for onboarding page |
+| `redirectIfAuthenticated` | Leave login/register if already logged in |
+| `getPostAuthRedirectPath` | ADMIN → `/admin`; not onboarded → `/onboarding`; else `/` |
+
+`SafeUser` is `User` without `passwordHash`.
+
+### Auth flows
+
+```text
+Register → create CUSTOMER + session → /onboarding
+Login    → POST /api/auth/login → session → post-auth path
+Onboard  → profile fields + phone → onboarded=true → /
+Logout   → POST /api/auth/logout (or logoutAction)
+```
+
+**Login** uses a classic HTML form `POST` to `/api/auth/login` (303 redirect) so browsers can offer to **save passwords**. Errors return to `/login?error=...&username=...`.
+
+**Register / onboarding / profile** use Server Actions in `app/actions/auth.ts`.
+
+### Onboarding vs profile
+
+New users must complete onboarding before shopping checkout:
+
+- Required: first name, last name, Jalali birth date, gender (`MALE` / `FEMALE`), phone
+- Phone rules: Persian/Arabic digits converted to English; must match `09` + 9 digits (11 total)
+
+Profile page can also update: national code, city, address, postal code.
+
+---
+
+## 5. Database schema
+
+File: `prisma/schema.prisma`  
+Provider: PostgreSQL (`DATABASE_URL` via `prisma.config.ts`)  
+IDs: `cuid()`
+
+### Entity relationship overview
+
+```text
+User ──< Session
+User ──< CartItem >── Product
+User ──< Order ──< OrderItem >── Product
+Category ──< Product ──< ProductImage
+Setting (key/value)
+```
+
+### Models
+
+#### User
+
+| Field | Notes |
+|-------|--------|
+| `username` | Unique |
+| `passwordHash` | bcrypt |
+| `role` | `"CUSTOMER"` \| `"ADMIN"` |
+| `firstName`, `lastName`, `birthDate`, `gender`, `phone` | Profile |
+| `nationalCode`, `address`, `city`, `postalCode` | Optional address/ID |
+| `onboarded` | Default `false` |
+
+#### Session
+
+`token` (unique), `userId` → User (cascade), `expiresAt`
+
+#### Category
+
+`name` / `slug` unique, optional `description`
+
+#### Product
+
+| Field | Notes |
+|-------|--------|
+| `name`, `slug` | Slug unique |
+| `weight` | Float, grams |
+| `wage` | Float, تومان, default 0 |
+| `active` | Default `true`; inactive hidden from storefront |
+| `categoryId` | Restrict on delete |
+| `images` | Binary blobs in DB |
+
+#### ProductImage
+
+`data` (Bytes), `mimeType`, cascade delete with product. Served at `GET /api/images/[id]`.
+
+#### CartItem
+
+Unique `(userId, productId)`, `quantity` default 1. Cascade with user/product.
+
+#### Order
+
+| Field | Notes |
+|-------|--------|
+| `code` | Unique public code (`KG-…`) |
+| `status` | Default `"PENDING"` |
+| `totalGrams`, `totalWage`, `goldPrice`, `totalPrice` | Snapshots |
+| `note` | Optional customer note |
+| Indexes | `userId`, `status` |
+
+#### OrderItem
+
+Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`. Product relation is Restrict (product cannot be deleted if referenced by order lines — delete product carefully / via admin flow).
+
+#### Setting
+
+`key` unique, `value` string. Used for gold price (and extensible for other config).
+
+---
+
+## 6. Application routes
+
+### Storefront & account
+
+| Route | Purpose |
+|-------|---------|
+| `/` | Home: hero, categories, featured products |
+| `/products` | Catalog with search, category filters, sort |
+| `/products/[slug]` | Product detail + add to cart |
+| `/cart` | Cart management |
+| `/checkout` | Confirm order + optional note (requires onboarded user) |
+| `/orders/[code]` | Order confirmation / detail (owner or admin) |
+| `/login` | Login form |
+| `/register` | Registration |
+| `/onboarding` | First-time profile completion |
+| `/profile` | Edit profile + order history |
+| `/about` | About the gallery |
+| `/contact` | Shop contact info from env/defaults |
+
+### Admin (layout requires admin)
+
+| Route | Purpose |
+|-------|---------|
+| `/admin` | Dashboard stats + gold price form |
+| `/admin/products` | Product list |
+| `/admin/products/new` | Create product |
+| `/admin/products/[id]/edit` | Edit product / images |
+| `/admin/categories` | Category CRUD |
+| `/admin/orders` | Orders list |
+| `/admin/orders/[id]` | Order detail + status actions |
+
+### API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/auth/login` | Credential check, session, 303 redirect |
+| `POST` | `/api/auth/logout` | Clear session → `{ ok: true }` |
+| `GET` | `/api/images/[id]` | Stream product image bytes (`force-dynamic`, cache 1 day) |
+
+### Layouts / guards
+
+| Layout | Guard |
+|--------|--------|
+| Root `app/layout.tsx` | RTL `lang="fa"`, header/footer shell, Toaster |
+| `login` / `register` | `redirectIfAuthenticated()` |
+| `onboarding` | `requireIncompleteOnboarding()` |
+| `admin` | `requireAdmin()` + sidebar |
+
+---
+
+## 7. Server actions
+
+### Auth — `app/actions/auth.ts`
+
+| Action | Does |
+|--------|------|
+| `registerAction` | Validate → create user → session → `/onboarding` |
+| `onboardingAction` | Save required profile → `onboarded` → `/` |
+| `updateProfileAction` | Update full profile from `/profile` |
+| `logoutAction` | Sign out → `/` |
+
+### Cart — `app/actions/cart.ts`
+
+| Action | Does |
+|--------|------|
+| `addToCartAction` | Login required; create or increment; skip inactive products |
+| `updateCartQuantityAction` | Set qty; qty ≤ 0 removes line |
+| `removeFromCartAction` | Remove line |
+| `clearCartAction` | Wipe cart (used after order) |
+
+### Orders — `app/actions/orders.ts`
+
+| Action | Does |
+|--------|------|
+| `placeOrderAction` | Snapshot prices, create `PENDING` order, clear cart, redirect to `/orders/{code}` |
+
+### Admin — `app/actions/admin.ts` (all call `requireAdmin`)
+
+| Action | Does |
+|--------|------|
+| Category CRUD | Create / update / delete (delete blocked if products exist) |
+| Product create/update | Fields + multi image upload from FormData `images` |
+| `deleteProductAction` / `deleteProductImageAction` | Remove product or one image |
+| `updateOrderStatusAction` | Validate via `orderStatusSchema` |
+| `deleteOrderAction` | Delete order |
+| `updateGoldPriceAction` | Upsert gold price setting |
+
+Product/category slugs: `lib/slug.ts` — slugify name + short random suffix.
+
+---
+
+## 8. Catalog & search
+
+Helpers: `lib/products.ts`, `lib/product-search.ts`
+
+### Storefront listing
+
+- Only **active** products by default
+- URL query params: `q` (text), `category` (comma-separated slugs), `sort`
+
+### Sort options
+
+| Value | Behavior |
+|-------|----------|
+| `newest` | By created date |
+| `price-asc` / `price-desc` | Computed with current gold price |
+
+### Categories (seeded)
+
+| Persian name | Slug |
+|--------------|------|
+| انگشتر | `ring` |
+| گردنبند | `necklace` |
+| دستبند | `bracelet` |
+| النگو | `bangle` |
+| گوشواره | `earrings` |
+| زنجیر | `chain` |
+
+---
+
+## 9. UI & design system
+
+### Brand & locale
+
+- Fully **Persian (Farsi)** UI, document `dir="rtl"` / `lang="fa"`
+- Brand names: گالری کریمی / گالری طلا و جواهر کریمی
+- Logo: `public/logo.png`
+- Visual tone: warm beige backgrounds, gold primary actions, deep navy accents
+
+### Design tokens (`app/globals.css`)
+
+| Token | Hex | Role |
+|-------|-----|------|
+| `--background` | `#f7f1e6` | Page beige |
+| `--foreground` | `#2a241c` | Body text |
+| `--primary` | `#b08843` | Gold actions |
+| `--secondary` | `#ece0c8` | Soft surfaces |
+| `--navy` | `#01034e` | Brand navy |
+| `--gold` | `#c9a14a` | Gold accent |
+| `--destructive` | `#b3261e` | Errors |
+| `--radius` | `0.85rem` | Corner radius |
+
+Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
+
+### Typography
+
+**Vazirmatn** mapped to `--font-sans` (Arabic + Latin subsets).
+
+### Component layers
+
+1. **UI primitives** — `components/ui/*` (shadcn-style): button, input, select, dialog, table, badge, card, etc.
+   - Button/badge variants include `navy`, `gold`, `success`
+2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `gold-price-form`, `admin-*`, `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
+
+### Important UX details
+
+- Sticky header with live gold price strip and cart count (Persian digits)
+- Checkout and order pages explain offline phone fulfillment
+- Order code is copyable (`OrderCodeBox`)
+- Numbers often displayed with `toPersianDigits` while forms normalize input to English digits
+
+### Digit handling
+
+- `toPersianDigits` / `toEnglishDigits` in `lib/format.ts`
+- `DigitsInput` converts Persian/Arabic numerals as the user types
+- Zod schemas preprocess digit fields with `toEnglishDigits`
+- Phone: must be `09XXXXXXXXX` (11 digits)
+
+---
+
+## 10. Validation (`lib/schemas.ts`)
+
+| Schema | Highlights |
+|--------|------------|
+| `loginSchema` | username min 3, password min 6 |
+| `registerSchema` | username `^[a-zA-Z0-9_.-]+$`, password confirm match |
+| `phoneSchema` | English digits + `/^09\d{9}$/` |
+| `onboardingSchema` | Name, birthDate, gender, phone |
+| `profileSchema` | Onboarding fields + optional national/postal/city/address |
+| `categorySchema` | Name required |
+| `productSchema` | weight > 0, wage ≥ 0, category required |
+| `goldPriceSchema` | price > 0 |
+| `orderStatusSchema` | `PENDING` \| `PAID` \| `FINISHED` \| `CANCELLED` |
+
+Formatting helpers also live in `lib/format.ts`: `formatToman`, `formatGram`, `formatDateJalali`, etc. (locale `fa-IR`, timezone `Asia/Tehran` for dates).
+
+---
+
+## 11. Shop contact config
+
+`lib/shop.ts` — `getShopInfo()` merges env with defaults:
+
+| Env var | Default |
+|---------|---------|
+| `SHOP_PHONE` | `021-52002092` |
+| `SHOP_MOBILE` | empty |
+| `SHOP_ADDRESS` | بازار بزرگ تهران، پاساژ دلگشا، طبقه ۳، واحد ۲۷ |
+| `SHOP_INSTAGRAM` | empty |
+| `SHOP_SLOGAN` | زیبایی و شکوهی که شایسته شماست |
+| `SHOP_EXPERIENCE` | با بیش از ۴۰ سال سابقه تک‌فروشی و بنکداری |
+
+Used on footer, contact page, and order confirmation.
+
+---
+
+## 12. Environment & setup
+
+### Required / important env
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection (required) |
+| `ADMIN_USERNAME` | Seed admin username (default `admin`) |
+| `ADMIN_PASSWORD` | Seed admin password (default `admin12345`) |
+| `SHOP_*` | Contact/branding overrides (see above) |
+| `NODE_ENV` | Affects secure cookies |
+
+### Typical local setup
+
+```bash
+# 1. Install
+npm install
+
+# 2. Set DATABASE_URL in .env
+
+# 3. Push schema
+npm run db:push
+
+# 4. Seed admin + sample catalog
+npm run seed
+
+# 5. Run
+npm run dev
+```
+
+Default admin after seed: username/password from env (or `admin` / `admin12345`). Change the password in production.
+
+Seed also creates gold price setting `4500000`, six categories, and sample products with generated SVG images (skips existing slugs).
+
+### Legacy
+
+`scripts/migrate-sqlite-to-pg.ts` — one-off migration helper from an earlier SQLite era.
+
+---
+
+## 13. End-to-end purchase path
+
+```text
+Browse catalog (live gold price in header)
+        ↓
+Login / Register → Onboarding (if needed)
+        ↓
+Add to cart → /cart → /checkout
+        ↓
+placeOrderAction
+  • compute prices with current goldPricePerGram
+  • create Order + OrderItems (PENDING)
+  • generate KG-###### code
+  • clear cart
+        ↓
+/orders/KG-######  (show code + shop phone)
+        ↓
+Customer calls gallery
+        ↓
+Admin: PENDING → PAID → FINISHED  (or CANCELLED)
+```
+
+---
+
+## 14. Key file map
+
+| Concern | Path |
+|---------|------|
+| Prisma schema | `prisma/schema.prisma` |
+| Seed | `prisma/seed.ts` |
+| Auth helpers | `lib/auth.ts` |
+| Auth actions | `app/actions/auth.ts` |
+| Login API | `app/api/auth/login/route.ts` |
+| Pricing | `lib/gold-price.ts` |
+| Orders helpers / actions | `lib/orders.ts`, `app/actions/orders.ts` |
+| Cart actions | `app/actions/cart.ts` |
+| Admin actions | `app/actions/admin.ts` |
+| Products / search | `lib/products.ts`, `lib/product-search.ts` |
+| Validation | `lib/schemas.ts` |
+| Formatting / digits | `lib/format.ts`, `components/digits-input.tsx` |
+| Shop copy | `lib/shop.ts` |
+| Design tokens | `app/globals.css` |
+| Root shell | `app/layout.tsx` |
+| Admin UI | `app/admin/**`, `components/admin-*` |
+
+---
+
+## 15. Design / product decisions (summary)
+
+1. **Offline checkout** — trust + phone fulfillment fits a traditional gold bazaar business; no payment provider complexity.
+2. **Price = weight × gold + wage** — standard Iranian jewelry pricing; wage is per piece, not per gram.
+3. **Snapshot on order** — protects both shop and customer when gold price moves.
+4. **Images in Postgres** — simple deploy (no S3 required); served through `/api/images/[id]`.
+5. **Cookie sessions** — no third-party auth; fits a single-shop app.
+6. **Classic login POST** — better browser password-manager support than Server Actions alone.
+7. **Persian-first UX** — RTL, Vazirmatn, Jalali dates, Persian digit display with English digit storage/validation.
+
+---
+
+## 16. What is intentionally not built (yet)
+
+- Online payment / gateway
+- Automatic gold-price API sync (placeholder comment exists)
+- Email/SMS notifications
+- Guest checkout (login required for cart/order)
+- Inventory/stock quantities
+- Multi-shop / multi-currency
+- Soft-delete or archive for products with order history constraints beyond Restrict
+
+These are natural extension points if the product grows.
+
+---
+
+*Last aligned with the codebase as of the documentation write-up. Prefer the source files listed above when behavior and this document disagree.*

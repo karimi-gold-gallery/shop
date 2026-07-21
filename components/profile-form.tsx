@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { updateProfileAction, type AuthState } from "@/app/actions/auth";
 import type { SafeUser } from "@/lib/auth";
+import { DigitsInput } from "@/components/digits-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -56,13 +57,13 @@ export function ProfileForm({ user }: { user: SafeUser }) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="شماره موبایل" id="phone" defaultValue={user.phone ?? ""} dir="ltr" className="text-right" inputMode="numeric" />
-        <Field label="کد ملی" id="nationalCode" defaultValue={user.nationalCode ?? ""} dir="ltr" className="text-right" inputMode="numeric" />
+        <Field label="شماره موبایل" id="phone" defaultValue={user.phone ?? ""} dir="ltr" className="text-right" inputMode="numeric" digitsOnly maxLength={11} />
+        <Field label="کد ملی" id="nationalCode" defaultValue={user.nationalCode ?? ""} dir="ltr" className="text-right" inputMode="numeric" digitsOnly maxLength={10} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="شهر" id="city" defaultValue={user.city ?? ""} />
-        <Field label="کد پستی" id="postalCode" defaultValue={user.postalCode ?? ""} dir="ltr" className="text-right" inputMode="numeric" />
+        <Field label="کد پستی" id="postalCode" defaultValue={user.postalCode ?? ""} dir="ltr" className="text-right" inputMode="numeric" digitsOnly maxLength={10} />
       </div>
 
       <div className="space-y-2">
@@ -89,6 +90,8 @@ function Field({
   dir,
   className,
   inputMode,
+  digitsOnly,
+  maxLength,
 }: {
   label: string;
   id: string;
@@ -96,11 +99,22 @@ function Field({
   dir?: string;
   className?: string;
   inputMode?: "numeric" | "text";
+  digitsOnly?: boolean;
+  maxLength?: number;
 }) {
+  const InputComponent = digitsOnly ? DigitsInput : Input;
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} name={id} defaultValue={defaultValue} dir={dir} className={className} inputMode={inputMode} />
+      <InputComponent
+        id={id}
+        name={id}
+        defaultValue={defaultValue}
+        dir={dir}
+        className={className}
+        inputMode={inputMode}
+        {...(digitsOnly ? { digitsOnly: true, maxLength } : {})}
+      />
     </div>
   );
 }

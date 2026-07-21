@@ -6,8 +6,8 @@ import { toast } from "sonner";
 
 import { updateGoldPriceAction, type ActionState } from "@/app/actions/admin";
 import { toPersianDigits } from "@/lib/format";
+import { DigitsInput } from "@/components/digits-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function GoldPriceForm({ currentPrice }: { currentPrice: number }) {
@@ -21,15 +21,15 @@ export function GoldPriceForm({ currentPrice }: { currentPrice: number }) {
     <form action={formAction} onSubmit={onSubmit} className="space-y-3">
       <div className="space-y-2">
         <Label htmlFor="price">قیمت هر گرم طلا (تومان)</Label>
-        <Input
+        <DigitsInput
           id="price"
           name="price"
-          type="number"
+          type="text"
+          digitsOnly
           inputMode="numeric"
           dir="ltr"
           className="text-right"
           defaultValue={currentPrice}
-          min={1}
         />
         <p className="text-xs text-muted-foreground">
           قیمت فعلی: {toPersianDigits(new Intl.NumberFormat("fa-IR").format(currentPrice))} تومان

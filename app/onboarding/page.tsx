@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { Diamond, UserCircle } from "lucide-react";
 
 import { onboardingAction, type AuthState } from "@/app/actions/auth";
+import { DigitsInput } from "@/components/digits-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -68,15 +69,17 @@ export default function OnboardingPage() {
 
           <div className="space-y-2">
             <Label htmlFor="phone">شماره موبایل</Label>
-            <Input
+            <DigitsInput
               id="phone"
               name="phone"
+              digitsOnly
+              maxLength={11}
               inputMode="numeric"
               dir="ltr"
               className="text-right"
               placeholder="09123456789"
             />
-            <p className="text-xs text-muted-foreground">مثال: 09120000000</p>
+            <p className="text-xs text-muted-foreground">با ۰۹ شروع شود و ۱۱ رقم باشد — مثال: ۰۹۱۲۰۰۰۰۰۰۰</p>
           </div>
 
           {state?.error && (

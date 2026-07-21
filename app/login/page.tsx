@@ -1,16 +1,14 @@
-"use client";
-
-import { useActionState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
-import { loginAction, type AuthState } from "@/app/actions/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
-export default function LoginPage() {
-  const [state, formAction, pending] = useActionState<AuthState, FormData>(loginAction, undefined);
+type SearchParams = Promise<{ error?: string; username?: string }>;
+
+export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {
+  const { error, username } = await searchParams;
 
   return (
     <div className="beige-texture flex items-center justify-center px-4 py-12">
@@ -28,22 +26,42 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground mt-1">برای ادامه، وارد حساب خود شوید</p>
         </div>
 
-        <form action={formAction} className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <form
+          method="post"
+          action="/api/auth/login"
+          autoComplete="on"
+          className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm"
+        >
           <div className="space-y-2">
             <Label htmlFor="username">نام کاربری</Label>
-            <Input id="username" name="username" placeholder="نام کاربری خود را وارد کنید" autoComplete="username" />
+            <Input
+              id="username"
+              name="username"
+              type="text"
+              placeholder="نام کاربری خود را وارد کنید"
+              autoComplete="username"
+              defaultValue={username ?? ""}
+              required
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">رمز عبور</Label>
-            <Input id="password" name="password" type="password" placeholder="رمز عبور" autoComplete="current-password" />
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              placeholder="رمز عبور"
+              autoComplete="current-password"
+              required
+            />
           </div>
 
-          {state?.error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>
+          {error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
 
-          <Button type="submit" variant="navy" className="w-full" disabled={pending}>
-            {pending ? "در حال ورود..." : "ورود"}
+          <Button type="submit" variant="navy" className="w-full">
+            ورود
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">

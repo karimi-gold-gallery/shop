@@ -9,44 +9,14 @@ import {
   getCurrentUser,
   hashPassword,
   signOut,
-  verifyPassword,
 } from "@/lib/auth";
 import {
-  loginSchema,
   registerSchema,
   onboardingSchema,
   profileSchema,
 } from "@/lib/schemas";
 
 export type AuthState = { error?: string } | undefined;
-
-export async function loginAction(
-  _prev: AuthState,
-  formData: FormData
-): Promise<AuthState> {
-  const parsed = loginSchema.safeParse({
-    username: formData.get("username"),
-    password: formData.get("password"),
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "اطلاعات نامعتبر است" };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { username: parsed.data.username },
-  });
-  if (!user) return { error: "نام کاربری یا رمز عبور اشتباه است" };
-
-  const ok = await verifyPassword(parsed.data.password, user.passwordHash);
-  if (!ok) return { error: "نام کاربری یا رمز عبور اشتباه است" };
-
-  await createSession(user.id);
-  revalidatePath("/", "layout");
-
-  if (user.role === "ADMIN") redirect("/admin");
-  if (!user.onboarded) redirect("/onboarding");
-  redirect("/");
-}
 
 export async function registerAction(
   _prev: AuthState,

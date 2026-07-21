@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { createProductAction, updateProductAction, deleteProductImageAction, type ActionState } from "@/app/actions/admin";
 import type { ProductCardData } from "@/lib/products";
+import { DigitsInput } from "@/components/digits-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,11 +64,11 @@ export function AdminProductForm({ categories, product }: Props) {
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="weight">وزن (گرم)</Label>
-          <Input id="weight" name="weight" type="number" step="0.001" min="0" dir="ltr" className="text-right" defaultValue={product?.weight ?? ""} />
+          <DigitsInput id="weight" name="weight" type="text" inputMode="decimal" dir="ltr" className="text-right" defaultValue={product?.weight ?? ""} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="wage">اجرت ساخت (تومان)</Label>
-          <Input id="wage" name="wage" type="number" step="1000" min="0" dir="ltr" className="text-right" defaultValue={product?.wage ?? 0} />
+          <DigitsInput id="wage" name="wage" type="text" digitsOnly inputMode="numeric" dir="ltr" className="text-right" defaultValue={product?.wage ?? 0} />
         </div>
         <div className="space-y-2">
           <Label>دسته‌بندی</Label>

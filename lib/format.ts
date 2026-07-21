@@ -4,6 +4,13 @@ export function toPersianDigits(value: string | number): string {
   return String(value).replace(/\d/g, (d) => persianDigits[Number(d)]);
 }
 
+/** Converts Persian (۰-۹) and Arabic-Indic (٠-٩) digits to English (0-9). */
+export function toEnglishDigits(value: string | number): string {
+  return String(value)
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - "۰".charCodeAt(0)))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - "٠".charCodeAt(0)));
+}
+
 const tomanFormatter = new Intl.NumberFormat("fa-IR", {
   maximumFractionDigits: 0,
 });
