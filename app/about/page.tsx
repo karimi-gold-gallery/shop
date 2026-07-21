@@ -16,23 +16,23 @@ export default function AboutPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">
-      <div className="mb-10 text-center">
-        <Badge variant="gold" className="mb-4 px-3 py-1">
-          <Sparkles className="size-3.5" /> {experience}
-        </Badge>
-        <h1 className="text-3xl font-bold text-navy sm:text-4xl">درباره گالری کریمی</h1>
-        <p className="mx-auto mt-3 max-w-2xl text-muted-foreground leading-7">{slogan}</p>
-      </div>
-
-      <div className="mb-10 flex justify-center">
-        <div className="overflow-hidden rounded-3xl border-4 border-gold/30 bg-navy shadow-xl">
+      <div className="mb-10 flex flex-col items-center gap-6 sm:flex-row-reverse sm:items-center sm:justify-center sm:gap-8">
+        <div className="overflow-hidden rounded-3xl border-4 border-gold/30 bg-navy shadow-xl shrink-0">
           <Image
             src="/logo.png"
             alt="گالری طلا و جواهر کریمی"
             width={320}
             height={320}
-            className="size-48 object-contain p-4 sm:size-56"
+            className="size-28 object-contain p-3 sm:size-36 sm:p-4"
+            priority
           />
+        </div>
+        <div className="text-center sm:text-start">
+          <Badge variant="gold" className="mb-4 px-3 py-1">
+            <Sparkles className="size-3.5" /> {experience}
+          </Badge>
+          <h1 className="text-3xl font-bold text-navy sm:text-4xl">درباره گالری کریمی</h1>
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground leading-7 sm:mx-0">{slogan}</p>
         </div>
       </div>
 
