@@ -83,6 +83,44 @@ export const goldPriceSchema = z.object({
   price: englishNumber.pipe(z.number().positive("قیمت طلا باید بیشتر از صفر باشد")),
 });
 
+const usernameField = z
+  .string()
+  .trim()
+  .min(3, "نام کاربری حداقل ۳ کاراکتر باشد")
+  .max(30, "نام کاربری حداکثر ۳۰ کاراکتر باشد")
+  .regex(/^[a-zA-Z0-9_.-]+$/, "نام کاربری فقط شامل حروف انگلیسی، عدد و _ . - باشد");
+
+export const adminCreateUserSchema = z.object({
+  username: usernameField,
+  password: z.string().min(6, "رمز عبور حداقل ۶ کاراکتر باشد"),
+  firstName: z.string().trim().min(2, "نام را وارد کنید"),
+  lastName: z.string().trim().min(2, "نام خانوادگی را وارد کنید"),
+  phone: phoneSchema,
+  gender: z.enum(["MALE", "FEMALE"], { message: "جنسیت را انتخاب کنید" }),
+  birthDate: z.string().trim().min(4, "تاریخ تولد را وارد کنید"),
+  city: z.string().trim().optional().or(z.literal("")),
+});
+
+export const adminUpdateUserSchema = z.object({
+  id: z.string().min(1),
+  username: usernameField,
+  password: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine((v) => !v || v.length >= 6, "رمز عبور حداقل ۶ کاراکتر باشد"),
+  firstName: z.string().trim().min(2, "نام را وارد کنید"),
+  lastName: z.string().trim().min(2, "نام خانوادگی را وارد کنید"),
+  phone: phoneSchema,
+  gender: z.enum(["MALE", "FEMALE"], { message: "جنسیت را انتخاب کنید" }),
+  birthDate: z.string().trim().min(4, "تاریخ تولد را وارد کنید"),
+  city: z.string().trim().optional().or(z.literal("")),
+  address: z.string().trim().optional().or(z.literal("")),
+  nationalCode: optionalDigitString,
+  postalCode: optionalDigitString,
+  onboarded: z.coerce.boolean().optional().default(true),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
@@ -90,3 +128,5 @@ export type ProfileInput = z.infer<typeof profileSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type ProductInput = z.infer<typeof productSchema>;
 export type GoldPriceInput = z.infer<typeof goldPriceSchema>;
+export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;

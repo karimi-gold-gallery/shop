@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
 import { toPersianDigits, formatToman, formatGram } from "@/lib/format";
+import { buildPagination, buildPagedHref, parsePageParam } from "@/lib/pagination";
 import { DeleteProductButton } from "@/components/delete-product-button";
+import { PaginationControls } from "@/components/pagination-controls";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,11 +15,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 export const metadata: Metadata = { title: "مدیریت محصولات" };
 
-export default async function AdminProductsPage() {
+type SearchParams = Promise<{ page?: string }>;
+
+export default async function AdminProductsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const raw = await searchParams;
+  const page = parsePageParam(raw.page);
+
+  const total = await prisma.product.count();
+  const pagination = buildPagination(page, total);
   const [products, goldPrice] = await Promise.all([
     prisma.product.findMany({
       include: { category: true, images: { take: 1, select: { id: true } } },
       orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
     }),
     getGoldPricePerGram(),
   ]);
@@ -27,7 +42,9 @@ export default async function AdminProductsPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-navy">مدیریت محصولات</h1>
-          <p className="text-sm text-muted-foreground">{toPersianDigits(products.length)} محصول</p>
+          <p className="text-sm text-muted-foreground">
+            {toPersianDigits(pagination.total)} محصول
+          </p>
         </div>
         <Button asChild variant="gold">
           <Link href="/admin/products/new">
@@ -50,6 +67,13 @@ export default async function AdminProductsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {products.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                  محصولی ثبت نشده است.
+                </TableCell>
+              </TableRow>
+            )}
             {products.map((p) => {
               const price = computeProductPrice(p.weight, p.wage, goldPrice);
               const img = p.images[0];
@@ -88,6 +112,12 @@ export default async function AdminProductsPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <PaginationControls
+        pagination={pagination}
+        itemLabel="محصول"
+        hrefForPage={(p) => buildPagedHref("/admin/products", raw, p)}
+      />
     </div>
   );
 }

@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SearchX } from "lucide-react";
 
-import { getCategories, getFilteredProducts } from "@/lib/products";
+import { getCategories, getFilteredProductsPage } from "@/lib/products";
 import { getGoldPricePerGram } from "@/lib/gold-price";
-import { parseProductSearchParams } from "@/lib/product-search";
+import { parseProductSearchParams, buildProductsUrl } from "@/lib/product-search";
+import { parsePageParam } from "@/lib/pagination";
 import { ProductCard } from "@/components/product-card";
 import { ProductFilters, ProductFiltersMobileTrigger } from "@/components/product-filters";
+import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
 import { toPersianDigits } from "@/lib/format";
 
@@ -17,6 +19,7 @@ type SearchParams = Promise<{
   q?: string;
   category?: string | string[];
   sort?: string;
+  page?: string;
 }>;
 
 function filtersSummary(
@@ -40,12 +43,17 @@ export default async function ProductsPage({
 }) {
   const raw = await searchParams;
   const filters = parseProductSearchParams(raw);
+  const page = parsePageParam(raw.page);
 
   const [categories, goldPrice] = await Promise.all([
     getCategories(),
     getGoldPricePerGram(),
   ]);
-  const products = await getFilteredProducts(filters, goldPrice);
+  const { products, pagination } = await getFilteredProductsPage(
+    filters,
+    goldPrice,
+    page
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
@@ -72,7 +80,7 @@ export default async function ProductsPage({
         </Suspense>
 
         <section>
-          {products.length === 0 ? (
+          {pagination.total === 0 ? (
             <div className="grid place-items-center rounded-xl border border-dashed border-border bg-card py-24 text-center">
               <SearchX className="size-10 text-muted-foreground mb-3" />
               <p className="font-semibold text-navy">محصولی یافت نشد</p>
@@ -88,13 +96,19 @@ export default async function ProductsPage({
           ) : (
             <>
               <p className="text-sm text-muted-foreground mb-4">
-                {toPersianDigits(products.length)} محصول یافت شد
+                {toPersianDigits(pagination.total)} محصول یافت شد
               </p>
               <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3">
                 {products.map((p) => (
                   <ProductCard key={p.id} product={p} goldPrice={goldPrice} />
                 ))}
               </div>
+              <PaginationControls
+                className="mt-8"
+                pagination={pagination}
+                itemLabel="محصول"
+                hrefForPage={(p) => buildProductsUrl(filters, p)}
+              />
             </>
           )}
         </section>

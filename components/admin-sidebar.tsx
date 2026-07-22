@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, FolderTree, ClipboardList } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  FolderTree,
+  ClipboardList,
+  Users,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,6 +17,7 @@ const items = [
   { href: "/admin/products", label: "محصولات", icon: Package },
   { href: "/admin/categories", label: "دسته‌بندی‌ها", icon: FolderTree },
   { href: "/admin/orders", label: "سفارش‌ها", icon: ClipboardList },
+  { href: "/admin/users", label: "کاربران", icon: Users },
 ];
 
 export function AdminSidebar() {

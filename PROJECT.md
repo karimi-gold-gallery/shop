@@ -14,12 +14,14 @@ Customers can:
 - See live prices based on the current gold price per gram plus making wage (اجرت)
 - Add items to a cart, place an order, and receive an order code
 - Contact the gallery by phone to complete payment and pickup/delivery
+- See their **membership level** (1–3) and how much more spending unlocks the next level
 
 There is **no online payment gateway**. Checkout creates a pending order; fulfillment happens offline after the customer calls the shop with their order code.
 
 Admins can:
 
 - Manage categories and products (including images)
+- Manage customers (list, create, edit, delete) and see each user’s level
 - Update the gold price per gram
 - View and update order statuses
 
@@ -123,6 +125,26 @@ Admin dashboard revenue sums `totalPrice` for orders with status `PAID` or `FINI
 3. Customer calls the gallery and references the code
 4. Admin updates status through the admin order UI
 
+### Customer membership levels
+
+Levels apply to **CUSTOMER** users only (not admins). They are **computed**, not stored on `User`.
+
+Helpers: `lib/user-levels.ts`  
+UI: `components/user-level-card.tsx` (profile), admin users table
+
+| Level | Min total spent (تومان) | Notes |
+|-------|-------------------------|--------|
+| 1 | `0` | Default for every new registration |
+| 2 | `50_000_000` | |
+| 3 | `200_000_000` | Max level |
+
+- **Spend source:** sum of `Order.totalPrice` where status is `PAID` or `FINISHED` (`LEVEL_COUNTABLE_STATUSES`)
+- **Profile:** customers see current level, progress bar, remaining amount to next level, and all thresholds
+- **Admin:** each customer row shows level + total spend
+- Levels currently unlock **no benefits** — reserved for future perks
+
+Thresholds live in `LEVEL_THRESHOLDS` and are easy to change later.
+
 ---
 
 ## 4. User roles & auth
@@ -185,6 +207,10 @@ New users must complete onboarding before shopping checkout:
 
 Profile page can also update: national code, city, address, postal code.
 
+Customers also see their membership level card on `/profile` (not shown for admins).
+
+Admins can create customers from `/admin/users` (bypassing self-registration); those users are created as `CUSTOMER` with `onboarded: true`.
+
 ---
 
 ## 5. Database schema
@@ -215,6 +241,9 @@ Setting (key/value)
 | `firstName`, `lastName`, `birthDate`, `gender`, `phone` | Profile |
 | `nationalCode`, `address`, `city`, `postalCode` | Optional address/ID |
 | `onboarded` | Default `false` |
+| *(no `level` column)* | Level is derived from paid/finished order totals |
+
+Deleting a customer with existing orders is **blocked** (`Order.userId` is `onDelete: Restrict`). Admin delete clears sessions + cart first when the user has zero orders.
 
 #### Session
 
@@ -270,7 +299,7 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 | Route | Purpose |
 |-------|---------|
 | `/` | Home: hero, categories, featured products |
-| `/products` | Catalog with search, category filters, sort |
+| `/products` | Catalog with search, category filters, sort, **pagination** (`?page=`) |
 | `/products/[slug]` | Product detail + add to cart |
 | `/cart` | Cart management |
 | `/checkout` | Confirm order + optional note (requires onboarded user) |
@@ -278,7 +307,7 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 | `/login` | Login form |
 | `/register` | Registration |
 | `/onboarding` | First-time profile completion |
-| `/profile` | Edit profile + order history |
+| `/profile` | Edit profile, membership level, paginated order history (`?tab=orders&page=`) |
 | `/about` | About the gallery |
 | `/contact` | Shop contact info from env/defaults |
 
@@ -287,12 +316,13 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 | Route | Purpose |
 |-------|---------|
 | `/admin` | Dashboard stats + gold price form |
-| `/admin/products` | Product list |
+| `/admin/products` | Product list (paginated) |
 | `/admin/products/new` | Create product |
 | `/admin/products/[id]/edit` | Edit product / images |
 | `/admin/categories` | Category CRUD |
-| `/admin/orders` | Orders list |
+| `/admin/orders` | Orders list (paginated) |
 | `/admin/orders/[id]` | Order detail + status actions |
+| `/admin/users` | Customer list + create / edit / delete (paginated); shows level & spend |
 
 ### API
 
@@ -349,8 +379,13 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 | `updateOrderStatusAction` | Validate via `orderStatusSchema` |
 | `deleteOrderAction` | Delete order |
 | `updateGoldPriceAction` | Upsert gold price setting |
+| `createUserAction` | Create `CUSTOMER` (admin form; `onboarded: true`) |
+| `updateUserAction` | Update customer profile; optional password change |
+| `deleteUserAction` | Delete customer if no orders; clears sessions + cart |
 
 Product/category slugs: `lib/slug.ts` — slugify name + short random suffix.
+
+Admin users UI: `components/admin-users.tsx` (`CreateUserButton`, table with edit/delete dialogs).
 
 ---
 
@@ -361,14 +396,16 @@ Helpers: `lib/products.ts`, `lib/product-search.ts`
 ### Storefront listing
 
 - Only **active** products by default
-- URL query params: `q` (text), `category` (comma-separated slugs), `sort`
+- URL query params: `q` (text), `category` (comma-separated slugs), `sort`, `page`
+- Changing filters rebuilds the URL **without** `page` (resets to page 1)
+- Paginated via `getFilteredProductsPage` → `{ products, pagination }`
 
 ### Sort options
 
 | Value | Behavior |
 |-------|----------|
-| `newest` | By created date |
-| `price-asc` / `price-desc` | Computed with current gold price |
+| `newest` | By created date — true DB `skip` / `take` |
+| `price-asc` / `price-desc` | Rank by computed price (`weight × gold + wage`), then hydrate the current page |
 
 ### Categories (seeded)
 
@@ -383,7 +420,24 @@ Helpers: `lib/products.ts`, `lib/product-search.ts`
 
 ---
 
-## 9. UI & design system
+## 9. Pagination
+
+Shared helpers: `lib/pagination.ts`  
+UI: `components/pagination-controls.tsx` (prev/next, page numbers, range label, RTL)
+
+| Constant / page | Default page size |
+|-----------------|-------------------|
+| `DEFAULT_PAGE_SIZE` (admin products, orders, users) | **20** |
+| `PRODUCTS_PAGE_SIZE` (storefront `/products`) | **12** |
+| `PROFILE_ORDERS_PAGE_SIZE` (`/profile?tab=orders`) | **10** |
+
+Query param: `?page=` (1-based). Invalid / out-of-range pages are clamped.
+
+Categories admin list is **not** paginated (expected to stay small).
+
+---
+
+## 10. UI & design system
 
 ### Brand & locale
 
@@ -415,7 +469,7 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 
 1. **UI primitives** — `components/ui/*` (shadcn-style): button, input, select, dialog, table, badge, card, etc.
    - Button/badge variants include `navy`, `gold`, `success`
-2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `gold-price-form`, `admin-*`, `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
+2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `user-level-card`, `pagination-controls`, `gold-price-form`, `admin-*` (including `admin-users`), `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
 
 ### Important UX details
 
@@ -433,7 +487,7 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 
 ---
 
-## 10. Validation (`lib/schemas.ts`)
+## 11. Validation (`lib/schemas.ts`)
 
 | Schema | Highlights |
 |--------|------------|
@@ -446,12 +500,14 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 | `productSchema` | weight > 0, wage ≥ 0, category required |
 | `goldPriceSchema` | price > 0 |
 | `orderStatusSchema` | `PENDING` \| `PAID` \| `FINISHED` \| `CANCELLED` |
+| `adminCreateUserSchema` | username, password, name, phone, gender, birthDate, optional city |
+| `adminUpdateUserSchema` | same + optional password, address/national/postal, `onboarded` |
 
 Formatting helpers also live in `lib/format.ts`: `formatToman`, `formatGram`, `formatDateJalali`, etc. (locale `fa-IR`, timezone `Asia/Tehran` for dates).
 
 ---
 
-## 11. Shop contact config
+## 12. Shop contact config
 
 `lib/shop.ts` — `getShopInfo()` merges env with defaults:
 
@@ -468,7 +524,7 @@ Used on footer, contact page, and order confirmation.
 
 ---
 
-## 12. Environment & setup
+## 13. Environment & setup
 
 ### Required / important env
 
@@ -502,13 +558,21 @@ Default admin after seed: username/password from env (or `admin` / `admin12345`)
 
 Seed also creates gold price setting `4500000`, six categories, and sample products with generated SVG images (skips existing slugs).
 
+### Optional sample customers
+
+`prisma/seed-users.ts` — creates **30** sample `CUSTOMER` accounts (`user01` … `user30`, password `User12345`). Skips existing usernames.
+
+```bash
+./node_modules/.bin/tsx prisma/seed-users.ts
+```
+
 ### Legacy
 
 `scripts/migrate-sqlite-to-pg.ts` — one-off migration helper from an earlier SQLite era.
 
 ---
 
-## 13. End-to-end purchase path
+## 14. End-to-end purchase path
 
 ```text
 Browse catalog (live gold price in header)
@@ -532,19 +596,23 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 
 ---
 
-## 14. Key file map
+## 15. Key file map
 
 | Concern | Path |
 |---------|------|
 | Prisma schema | `prisma/schema.prisma` |
 | Seed | `prisma/seed.ts` |
+| Sample users seed | `prisma/seed-users.ts` |
 | Auth helpers | `lib/auth.ts` |
 | Auth actions | `app/actions/auth.ts` |
 | Login API | `app/api/auth/login/route.ts` |
 | Pricing | `lib/gold-price.ts` |
+| User levels | `lib/user-levels.ts`, `components/user-level-card.tsx` |
+| Pagination | `lib/pagination.ts`, `components/pagination-controls.tsx` |
 | Orders helpers / actions | `lib/orders.ts`, `app/actions/orders.ts` |
 | Cart actions | `app/actions/cart.ts` |
 | Admin actions | `app/actions/admin.ts` |
+| Admin users UI | `app/admin/users/page.tsx`, `components/admin-users.tsx` |
 | Products / search | `lib/products.ts`, `lib/product-search.ts` |
 | Validation | `lib/schemas.ts` |
 | Formatting / digits | `lib/format.ts`, `components/digits-input.tsx` |
@@ -555,7 +623,7 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 
 ---
 
-## 15. Design / product decisions (summary)
+## 16. Design / product decisions (summary)
 
 1. **Offline checkout** — trust + phone fulfillment fits a traditional gold bazaar business; no payment provider complexity.
 2. **Price = weight × gold + wage** — standard Iranian jewelry pricing; wage is per piece, not per gram.
@@ -564,10 +632,12 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 5. **Cookie sessions** — no third-party auth; fits a single-shop app.
 6. **Classic login POST** — better browser password-manager support than Server Actions alone.
 7. **Persian-first UX** — RTL, Vazirmatn, Jalali dates, Persian digit display with English digit storage/validation.
+8. **Computed membership levels** — no extra column to keep in sync; spend from settled orders drives level 1–3.
+9. **Server-side pagination** — list pages use `count` + `skip`/`take` instead of loading full tables.
 
 ---
 
-## 16. What is intentionally not built (yet)
+## 17. What is intentionally not built (yet)
 
 - Online payment / gateway
 - Automatic gold-price API sync (placeholder comment exists)
@@ -576,9 +646,11 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 - Inventory/stock quantities
 - Multi-shop / multi-currency
 - Soft-delete or archive for products with order history constraints beyond Restrict
+- **Level benefits / privileges** — levels are visible and progress is tracked, but they do not change pricing, shipping, or access yet
+- Deleting customers who already have orders (blocked by design)
 
 These are natural extension points if the product grows.
 
 ---
 
-*Last aligned with the codebase as of the documentation write-up. Prefer the source files listed above when behavior and this document disagree.*
+*Last aligned with the codebase after user levels, pagination, and admin user CRUD. Prefer the source files listed above when behavior and this document disagree.*

@@ -11,7 +11,17 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { toPersianDigits, formatToman, formatDateJalali } from "@/lib/format";
+import { LEVEL_COUNTABLE_STATUSES } from "@/lib/user-levels";
+import {
+  buildPagination,
+  buildPagedHref,
+  parsePageParam,
+  PROFILE_ORDERS_PAGE_SIZE,
+  type Pagination,
+} from "@/lib/pagination";
 import { ProfileForm } from "@/components/profile-form";
+import { UserLevelCard } from "@/components/user-level-card";
+import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,7 +38,7 @@ const STATUS_LABEL: Record<
   CANCELLED: { label: "لغو شده", variant: "destructive" },
 };
 
-type SearchParams = Promise<{ tab?: string }>;
+type SearchParams = Promise<{ tab?: string; page?: string }>;
 
 export default async function ProfilePage({
   searchParams,
@@ -55,21 +65,49 @@ export default async function ProfilePage({
     );
   }
 
-  const { tab } = await searchParams;
-  const activeTab = tab === "orders" ? "orders" : "profile";
+  const raw = await searchParams;
+  const activeTab = raw.tab === "orders" ? "orders" : "profile";
+  const isCustomer = user.role === "CUSTOMER";
+  const page = parsePageParam(raw.page);
 
-  const orders = await prisma.order.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      code: true,
-      status: true,
-      totalPrice: true,
-      createdAt: true,
-      _count: { select: { items: true } },
-    },
-  });
+  const [ordersTotal, spendAgg] = await Promise.all([
+    prisma.order.count({ where: { userId: user.id } }),
+    isCustomer
+      ? prisma.order.aggregate({
+          where: {
+            userId: user.id,
+            status: { in: [...LEVEL_COUNTABLE_STATUSES] },
+          },
+          _sum: { totalPrice: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const ordersPagination = buildPagination(
+    page,
+    ordersTotal,
+    PROFILE_ORDERS_PAGE_SIZE
+  );
+
+  const orders =
+    activeTab === "orders"
+      ? await prisma.order.findMany({
+          where: { userId: user.id },
+          orderBy: { createdAt: "desc" },
+          skip: ordersPagination.skip,
+          take: ordersPagination.take,
+          select: {
+            id: true,
+            code: true,
+            status: true,
+            totalPrice: true,
+            createdAt: true,
+            _count: { select: { items: true } },
+          },
+        })
+      : [];
+
+  const totalSpent = spendAgg?._sum.totalPrice ?? 0;
 
   const displayName = user.firstName
     ? `${user.firstName} ${user.lastName ?? ""}`.trim()
@@ -101,11 +139,11 @@ export default async function ProfilePage({
             </div>
           </div>
 
-          {activeTab === "orders" && orders.length > 0 ? (
+          {activeTab === "orders" && ordersTotal > 0 ? (
             <div className="flex items-center gap-2 rounded-2xl border border-border/80 bg-card/80 px-4 py-2.5 shadow-sm backdrop-blur-sm">
               <Package className="size-4 text-gold" />
               <span className="text-sm text-muted-foreground">تعداد سفارش‌ها:</span>
-              <span className="font-bold text-navy">{toPersianDigits(orders.length)}</span>
+              <span className="font-bold text-navy">{toPersianDigits(ordersTotal)}</span>
             </div>
           ) : null}
         </div>
@@ -117,7 +155,7 @@ export default async function ProfilePage({
           </TabLink>
           <TabLink active={activeTab === "orders"} href="/profile?tab=orders">
             سفارش‌های من
-            {orders.length > 0 ? (
+            {ordersTotal > 0 ? (
               <span
                 className={cn(
                   "mr-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
@@ -126,24 +164,33 @@ export default async function ProfilePage({
                     : "bg-secondary text-muted-foreground"
                 )}
               >
-                {toPersianDigits(orders.length)}
+                {toPersianDigits(ordersTotal)}
               </span>
             ) : null}
           </TabLink>
         </div>
 
         {activeTab === "profile" ? (
-          <div className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm sm:p-7">
-            <div className="mb-5">
-              <h2 className="font-bold text-navy">اطلاعات شخصی</h2>
-              <p className="mt-1 text-sm text-muted-foreground leading-7">
-                اطلاعات خود را بررسی و در صورت نیاز به‌روز کنید.
-              </p>
+          <div className="space-y-5">
+            {isCustomer ? <UserLevelCard totalSpent={totalSpent} /> : null}
+            <div className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm sm:p-7">
+              <div className="mb-5">
+                <h2 className="font-bold text-navy">اطلاعات شخصی</h2>
+                <p className="mt-1 text-sm text-muted-foreground leading-7">
+                  اطلاعات خود را بررسی و در صورت نیاز به‌روز کنید.
+                </p>
+              </div>
+              <ProfileForm user={user} />
             </div>
-            <ProfileForm user={user} />
           </div>
         ) : (
-          <OrdersPanel orders={orders} />
+          <OrdersPanel
+            orders={orders}
+            pagination={ordersPagination}
+            hrefForPage={(p) =>
+              buildPagedHref("/profile", { tab: "orders" }, p)
+            }
+          />
         )}
       </div>
     </div>
@@ -152,6 +199,8 @@ export default async function ProfilePage({
 
 function OrdersPanel({
   orders,
+  pagination,
+  hrefForPage,
 }: {
   orders: {
     id: string;
@@ -161,8 +210,10 @@ function OrdersPanel({
     createdAt: Date;
     _count: { items: number };
   }[];
+  pagination: Pagination;
+  hrefForPage: (page: number) => string;
 }) {
-  if (orders.length === 0) {
+  if (pagination.total === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-card/60 px-6 py-14 text-center shadow-sm backdrop-blur-sm">
         <span className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-navy text-gold shadow-md ring-1 ring-gold/30">
@@ -238,6 +289,13 @@ function OrdersPanel({
           );
         })}
       </ul>
+
+      <PaginationControls
+        className="pt-2"
+        pagination={pagination}
+        itemLabel="سفارش"
+        hrefForPage={hrefForPage}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, hashPassword } from "@/lib/auth";
 import { setGoldPricePerGram } from "@/lib/gold-price";
 import { slugify } from "@/lib/slug";
 import {
@@ -13,6 +13,8 @@ import {
   productSchema,
   goldPriceSchema,
   orderStatusSchema,
+  adminCreateUserSchema,
+  adminUpdateUserSchema,
 } from "@/lib/schemas";
 
 export type ActionState = { error?: string; success?: string } | undefined;
@@ -228,4 +230,134 @@ export async function updateGoldPriceAction(
   await setGoldPricePerGram(parsed.data.price);
   revalidatePath("/", "layout");
   return { success: "قیمت طلا به‌روز شد" };
+}
+
+/* ----------------------------- Users ----------------------------- */
+
+export async function createUserAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  await requireAdmin();
+  const parsed = adminCreateUserSchema.safeParse({
+    username: formData.get("username"),
+    password: formData.get("password"),
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
+    phone: formData.get("phone"),
+    gender: formData.get("gender"),
+    birthDate: formData.get("birthDate"),
+    city: formData.get("city"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const existing = await prisma.user.findUnique({
+    where: { username: parsed.data.username },
+  });
+  if (existing) return { error: "این نام کاربری قبلاً ثبت شده است" };
+
+  const passwordHash = await hashPassword(parsed.data.password);
+  await prisma.user.create({
+    data: {
+      username: parsed.data.username,
+      passwordHash,
+      role: "CUSTOMER",
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
+      phone: parsed.data.phone,
+      gender: parsed.data.gender,
+      birthDate: parsed.data.birthDate,
+      city: parsed.data.city || null,
+      onboarded: true,
+    },
+  });
+
+  revalidatePath("/admin/users");
+  return { success: "کاربر ایجاد شد" };
+}
+
+export async function updateUserAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  await requireAdmin();
+  const parsed = adminUpdateUserSchema.safeParse({
+    id: formData.get("id"),
+    username: formData.get("username"),
+    password: formData.get("password"),
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
+    phone: formData.get("phone"),
+    gender: formData.get("gender"),
+    birthDate: formData.get("birthDate"),
+    city: formData.get("city"),
+    address: formData.get("address"),
+    nationalCode: formData.get("nationalCode"),
+    postalCode: formData.get("postalCode"),
+    onboarded: formData.get("onboarded") === "on" || formData.get("onboarded") === "true",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const user = await prisma.user.findUnique({ where: { id: parsed.data.id } });
+  if (!user || user.role !== "CUSTOMER") {
+    return { error: "کاربر یافت نشد" };
+  }
+
+  const usernameTaken = await prisma.user.findFirst({
+    where: {
+      username: parsed.data.username,
+      NOT: { id: parsed.data.id },
+    },
+  });
+  if (usernameTaken) return { error: "این نام کاربری قبلاً ثبت شده است" };
+
+  const data: Prisma.UserUpdateInput = {
+    username: parsed.data.username,
+    firstName: parsed.data.firstName,
+    lastName: parsed.data.lastName,
+    phone: parsed.data.phone,
+    gender: parsed.data.gender,
+    birthDate: parsed.data.birthDate,
+    city: parsed.data.city || null,
+    address: parsed.data.address || null,
+    nationalCode: parsed.data.nationalCode || null,
+    postalCode: parsed.data.postalCode || null,
+    onboarded: parsed.data.onboarded ?? true,
+  };
+
+  if (parsed.data.password) {
+    data.passwordHash = await hashPassword(parsed.data.password);
+  }
+
+  try {
+    await prisma.user.update({ where: { id: parsed.data.id }, data });
+  } catch {
+    return { error: "به‌روزرسانی کاربر ناموفق بود" };
+  }
+
+  revalidatePath("/admin/users");
+  return { success: "کاربر به‌روز شد" };
+}
+
+export async function deleteUserAction(id: string): Promise<void> {
+  await requireAdmin();
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, role: true, _count: { select: { orders: true } } },
+  });
+  if (!user || user.role !== "CUSTOMER") {
+    throw new Error("کاربر یافت نشد");
+  }
+  if (user._count.orders > 0) {
+    throw new Error("این کاربر سفارش دارد و قابل حذف نیست");
+  }
+
+  await prisma.$transaction([
+    prisma.session.deleteMany({ where: { userId: id } }),
+    prisma.cartItem.deleteMany({ where: { userId: id } }),
+    prisma.user.delete({ where: { id } }),
+  ]);
+
+  revalidatePath("/admin/users");
 }

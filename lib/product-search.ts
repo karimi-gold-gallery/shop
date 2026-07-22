@@ -29,16 +29,20 @@ export function parseProductSearchParams(params: {
   };
 }
 
-export function buildProductsSearchParams(filters: ProductSearchFilters): URLSearchParams {
+export function buildProductsSearchParams(
+  filters: ProductSearchFilters,
+  page?: number
+): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
   if (filters.categorySlugs.length > 0) params.set("category", filters.categorySlugs.join(","));
   if (filters.sort !== "newest") params.set("sort", filters.sort);
+  if (page && page > 1) params.set("page", String(page));
   return params;
 }
 
-export function buildProductsUrl(filters: ProductSearchFilters): string {
-  const params = buildProductsSearchParams(filters);
+export function buildProductsUrl(filters: ProductSearchFilters, page?: number): string {
+  const params = buildProductsSearchParams(filters, page);
   const qs = params.toString();
   return qs ? `/products?${qs}` : "/products";
 }
