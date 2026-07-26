@@ -83,6 +83,19 @@ export const goldPriceSchema = z.object({
   price: englishNumber.pipe(z.number().positive("قیمت طلا باید بیشتر از صفر باشد")),
 });
 
+/** Personal customer discount, 0–100 %. Empty input means "no discount". */
+const discountPercentField = z.preprocess(
+  (value) => {
+    const normalized = withEnglishDigits(value);
+    if (normalized === "" || normalized === null || normalized === undefined) return 0;
+    return normalized;
+  },
+  z.coerce
+    .number({ message: "درصد تخفیف نامعتبر است" })
+    .min(0, "درصد تخفیف نمی‌تواند منفی باشد")
+    .max(100, "درصد تخفیف حداکثر ۱۰۰ است")
+);
+
 const usernameField = z
   .string()
   .trim()
@@ -99,6 +112,7 @@ export const adminCreateUserSchema = z.object({
   gender: z.enum(["MALE", "FEMALE"], { message: "جنسیت را انتخاب کنید" }),
   birthDate: z.string().trim().min(4, "تاریخ تولد را وارد کنید"),
   city: z.string().trim().optional().or(z.literal("")),
+  discountPercent: discountPercentField,
 });
 
 export const adminUpdateUserSchema = z.object({
@@ -118,6 +132,7 @@ export const adminUpdateUserSchema = z.object({
   address: z.string().trim().optional().or(z.literal("")),
   nationalCode: optionalDigitString,
   postalCode: optionalDigitString,
+  discountPercent: discountPercentField,
   onboarded: z.coerce.boolean().optional().default(true),
 });
 

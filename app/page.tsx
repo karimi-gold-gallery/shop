@@ -4,6 +4,7 @@ import { ArrowLeft, Diamond, ShieldCheck, Truck, Sparkles, MapPin } from "lucide
 
 import { getProducts, getCategories } from "@/lib/products";
 import { getGoldPricePerGram } from "@/lib/gold-price";
+import { getUserDiscountPercent } from "@/lib/pricing";
 import { getShopInfo } from "@/lib/shop";
 import { getCurrentUser } from "@/lib/auth";
 import { toPersianDigits, formatNumber } from "@/lib/format";
@@ -19,6 +20,7 @@ export default async function HomePage() {
     getCurrentUser(),
   ]);
 
+  const discountPercent = getUserDiscountPercent(user);
   const { slogan, experience, address } = getShopInfo();
 
   return (
@@ -125,7 +127,12 @@ export default async function HomePage() {
 
         <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
           {featured.map((p) => (
-            <ProductCard key={p.id} product={p} goldPrice={goldPrice} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              goldPrice={goldPrice}
+              discountPercent={discountPercent}
+            />
           ))}
         </div>
       </section>

@@ -4,7 +4,13 @@ import type { Metadata } from "next";
 import { ChevronLeft, User, Phone, MapPin } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
-import { toPersianDigits, formatToman, formatGram, formatDateJalali } from "@/lib/format";
+import {
+  toPersianDigits,
+  formatToman,
+  formatGram,
+  formatPercent,
+  formatDateJalali,
+} from "@/lib/format";
 import { OrderActions } from "@/components/admin-order-actions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +44,7 @@ export default async function AdminOrderDetailPage({ params }: Props) {
   if (!order) notFound();
   const status = STATUS_LABEL[order.status] ?? STATUS_LABEL.PENDING;
   const customer = order.user;
+  const basePrice = order.totalGrams * order.goldPrice + order.totalWage;
 
   return (
     <div className="space-y-5">
@@ -86,6 +93,15 @@ export default async function AdminOrderDetailPage({ params }: Props) {
               <div className="flex justify-between"><span className="text-muted-foreground">مجموع وزن طلا</span><span className="font-medium">{toPersianDigits(formatGram(order.totalGrams))}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">مجموع اجرت</span><span className="font-medium">{toPersianDigits(formatToman(order.totalWage))}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">قیمت هر گرم طلا (زمان ثبت)</span><span className="font-medium">{toPersianDigits(formatToman(order.goldPrice))}</span></div>
+              {order.discountPercent > 0 && (
+                <>
+                  <div className="flex justify-between"><span className="text-muted-foreground">جمع بدون تخفیف</span><span className="font-medium">{toPersianDigits(formatToman(basePrice))}</span></div>
+                  <div className="flex justify-between text-emerald-700">
+                    <span>تخفیف مشتری ({toPersianDigits(formatPercent(order.discountPercent))}٪)</span>
+                    <span className="font-medium">− {toPersianDigits(formatToman(basePrice - order.totalPrice))}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between text-base"><span className="font-bold text-navy">مبلغ کل</span><span className="font-extrabold text-navy">{toPersianDigits(formatToman(order.totalPrice))}</span></div>
             </div>
           </CardContent>

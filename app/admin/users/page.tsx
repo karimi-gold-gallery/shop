@@ -51,6 +51,7 @@ export default async function AdminUsersPage({
       postalCode: true,
       birthDate: true,
       gender: true,
+      discountPercent: true,
       onboarded: true,
       createdAt: true,
       orders: {
@@ -81,6 +82,7 @@ export default async function AdminUsersPage({
       postalCode: user.postalCode,
       birthDate: user.birthDate,
       gender: user.gender,
+      discountPercent: user.discountPercent,
       onboarded: user.onboarded,
       name,
       level,
@@ -101,7 +103,8 @@ export default async function AdminUsersPage({
             <h1 className="text-2xl font-bold text-navy">مدیریت کاربران</h1>
             <p className="text-sm text-muted-foreground">
               {toPersianDigits(pagination.total)} مشتری · سطح بر اساس مجموع
-              خریدهای تسویه‌شده
+              خریدهای تسویه‌شده · تخفیف اختصاصی روی همه قیمت‌های همان مشتری
+              اعمال می‌شود
             </p>
           </div>
         </div>

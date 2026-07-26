@@ -248,6 +248,7 @@ export async function createUserAction(
     gender: formData.get("gender"),
     birthDate: formData.get("birthDate"),
     city: formData.get("city"),
+    discountPercent: formData.get("discountPercent"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
@@ -268,6 +269,7 @@ export async function createUserAction(
       gender: parsed.data.gender,
       birthDate: parsed.data.birthDate,
       city: parsed.data.city || null,
+      discountPercent: parsed.data.discountPercent,
       onboarded: true,
     },
   });
@@ -294,6 +296,7 @@ export async function updateUserAction(
     address: formData.get("address"),
     nationalCode: formData.get("nationalCode"),
     postalCode: formData.get("postalCode"),
+    discountPercent: formData.get("discountPercent"),
     onboarded: formData.get("onboarded") === "on" || formData.get("onboarded") === "true",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
@@ -322,6 +325,7 @@ export async function updateUserAction(
     address: parsed.data.address || null,
     nationalCode: parsed.data.nationalCode || null,
     postalCode: parsed.data.postalCode || null,
+    discountPercent: parsed.data.discountPercent,
     onboarded: parsed.data.onboarded ?? true,
   };
 
@@ -336,6 +340,8 @@ export async function updateUserAction(
   }
 
   revalidatePath("/admin/users");
+  // Prices are personalised, so every price-bearing page for this customer is stale.
+  revalidatePath("/", "layout");
   return { success: "کاربر به‌روز شد" };
 }
 

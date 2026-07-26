@@ -5,8 +5,15 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
-import { formatGram, formatToman, toPersianDigits } from "@/lib/format";
+import { getUserDiscountPercent } from "@/lib/pricing";
+import {
+  formatGram,
+  formatPercent,
+  formatToman,
+  toPersianDigits,
+} from "@/lib/format";
 import { CartItemRow } from "@/components/cart-item-row";
+import { PersonalDiscountNotice } from "@/components/personal-discount-notice";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -49,22 +56,35 @@ export default async function CartPage() {
     );
   }
 
+  const discountPercent = getUserDiscountPercent(user);
+
   let totalGrams = 0;
   let totalWage = 0;
   let totalPrice = 0;
+  let basePrice = 0;
 
   const rows = items.map((item) => {
-    const unitPrice = computeProductPrice(item.product.weight, item.product.wage, goldPrice);
+    const unitPrice = computeProductPrice(
+      item.product.weight,
+      item.product.wage,
+      goldPrice,
+      discountPercent
+    );
     const lineTotal = unitPrice * item.quantity;
     totalGrams += item.product.weight * item.quantity;
     totalWage += item.product.wage * item.quantity;
     totalPrice += lineTotal;
+    basePrice += (item.product.weight * goldPrice + item.product.wage) * item.quantity;
     return { item, unitPrice, lineTotal };
   });
+
+  const discountAmount = basePrice - totalPrice;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-2xl font-bold text-navy mb-6">سبد خرید</h1>
+
+      <PersonalDiscountNotice discountPercent={discountPercent} className="mb-6" />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-3">
@@ -101,6 +121,19 @@ export default async function CartPage() {
             <Row label="مجموع وزن طلا" value={`${toPersianDigits(formatGram(totalGrams))}`} />
             <Row label="مجموع اجرت" value={toPersianDigits(formatToman(totalWage))} />
             <Row label="قیمت هر گرم طلا" value={toPersianDigits(formatToman(goldPrice))} />
+            {discountPercent > 0 && (
+              <>
+                <Row label="جمع بدون تخفیف" value={toPersianDigits(formatToman(basePrice))} />
+                <div className="flex items-center justify-between text-emerald-700">
+                  <span>
+                    تخفیف اختصاصی ({toPersianDigits(formatPercent(discountPercent))}٪)
+                  </span>
+                  <span className="font-medium">
+                    − {toPersianDigits(formatToman(discountAmount))}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="border-t border-border my-3" />
             <div className="flex items-center justify-between">
               <span className="font-semibold text-navy">مبلغ قابل پرداخت</span>

@@ -19,6 +19,10 @@ const gramFormatter = new Intl.NumberFormat("fa-IR", {
   maximumFractionDigits: 3,
 });
 
+const percentFormatter = new Intl.NumberFormat("fa-IR", {
+  maximumFractionDigits: 2,
+});
+
 export function formatToman(amount: number): string {
   return `${tomanFormatter.format(Math.round(amount))} تومان`;
 }
@@ -29,6 +33,11 @@ export function formatNumber(amount: number): string {
 
 export function formatGram(weight: number): string {
   return `${gramFormatter.format(weight)} گرم`;
+}
+
+/** Bare percentage number (no sign) — e.g. `۷٫۵` for 7.5. */
+export function formatPercent(value: number): string {
+  return percentFormatter.format(value);
 }
 
 export function formatDateJalali(iso: string | Date): string {

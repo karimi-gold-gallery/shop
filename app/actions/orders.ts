@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
+import { getUserDiscountPercent } from "@/lib/pricing";
 import { generateOrderCode } from "@/lib/orders";
 
 export async function placeOrderAction(formData: FormData): Promise<void> {
@@ -21,6 +22,7 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
   if (items.length === 0) redirect("/cart");
 
   const goldPrice = await getGoldPricePerGram();
+  const discountPercent = getUserDiscountPercent(user);
   const note = (formData.get("note") as string | null)?.trim() || null;
 
   const code = await generateOrderCode();
@@ -30,7 +32,12 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
   let totalPrice = 0;
 
   const orderItems = items.map((item) => {
-    const unitPrice = computeProductPrice(item.product.weight, item.product.wage, goldPrice);
+    const unitPrice = computeProductPrice(
+      item.product.weight,
+      item.product.wage,
+      goldPrice,
+      discountPercent
+    );
     const lineTotal = unitPrice * item.quantity;
     totalGrams += item.product.weight * item.quantity;
     totalWage += item.product.wage * item.quantity;
@@ -55,6 +62,7 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
       totalGrams,
       totalWage,
       goldPrice,
+      discountPercent,
       totalPrice,
       note,
       items: { create: orderItems },

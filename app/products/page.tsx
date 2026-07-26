@@ -4,10 +4,11 @@ import { Suspense } from "react";
 import { SearchX } from "lucide-react";
 
 import { getCategories, getFilteredProductsPage } from "@/lib/products";
-import { getGoldPricePerGram } from "@/lib/gold-price";
+import { getViewerPricing } from "@/lib/pricing";
 import { parseProductSearchParams, buildProductsUrl } from "@/lib/product-search";
 import { parsePageParam } from "@/lib/pagination";
 import { ProductCard } from "@/components/product-card";
+import { PersonalDiscountNotice } from "@/components/personal-discount-notice";
 import { ProductFilters, ProductFiltersMobileTrigger } from "@/components/product-filters";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
@@ -45,9 +46,9 @@ export default async function ProductsPage({
   const filters = parseProductSearchParams(raw);
   const page = parsePageParam(raw.page);
 
-  const [categories, goldPrice] = await Promise.all([
+  const [categories, { goldPrice, discountPercent }] = await Promise.all([
     getCategories(),
-    getGoldPricePerGram(),
+    getViewerPricing(),
   ]);
   const { products, pagination } = await getFilteredProductsPage(
     filters,
@@ -61,6 +62,8 @@ export default async function ProductsPage({
         <h1 className="text-2xl font-bold text-navy mb-1">محصولات</h1>
         <p className="text-sm text-muted-foreground">{filtersSummary(filters, categories)}</p>
       </div>
+
+      <PersonalDiscountNotice discountPercent={discountPercent} className="mb-6" />
 
       <Suspense fallback={null}>
         <div className="mb-6">
@@ -100,7 +103,12 @@ export default async function ProductsPage({
               </p>
               <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3">
                 {products.map((p) => (
-                  <ProductCard key={p.id} product={p} goldPrice={goldPrice} />
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    goldPrice={goldPrice}
+                    discountPercent={discountPercent}
+                  />
                 ))}
               </div>
               <PaginationControls

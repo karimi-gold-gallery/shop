@@ -19,7 +19,9 @@ import {
   PROFILE_ORDERS_PAGE_SIZE,
   type Pagination,
 } from "@/lib/pagination";
+import { getUserDiscountPercent } from "@/lib/pricing";
 import { ProfileForm } from "@/components/profile-form";
+import { PersonalDiscountNotice } from "@/components/personal-discount-notice";
 import { UserLevelCard } from "@/components/user-level-card";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
@@ -172,6 +174,7 @@ export default async function ProfilePage({
 
         {activeTab === "profile" ? (
           <div className="space-y-5">
+            <PersonalDiscountNotice discountPercent={getUserDiscountPercent(user)} />
             {isCustomer ? <UserLevelCard totalSpent={totalSpent} /> : null}
             <div className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm sm:p-7">
               <div className="mb-5">

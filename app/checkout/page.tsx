@@ -3,9 +3,15 @@ import { ArrowLeft, PhoneCall } from "lucide-react";
 import type { Metadata } from "next";
 
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, requireOnboardedUser } from "@/lib/auth";
+import { requireOnboardedUser } from "@/lib/auth";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
-import { formatGram, formatToman, toPersianDigits } from "@/lib/format";
+import { getUserDiscountPercent } from "@/lib/pricing";
+import {
+  formatGram,
+  formatPercent,
+  formatToman,
+  toPersianDigits,
+} from "@/lib/format";
 import { placeOrderAction } from "@/app/actions/orders";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,9 +39,11 @@ export default async function CheckoutPage() {
   }
 
   const goldPrice = await getGoldPricePerGram();
+  const discountPercent = getUserDiscountPercent(user);
   let totalGrams = 0;
   let totalWage = 0;
   let totalPrice = 0;
+  let basePrice = 0;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -49,11 +57,17 @@ export default async function CheckoutPage() {
         <h2 className="font-bold text-navy mb-3">اقلام سفارش</h2>
         <div className="divide-y divide-border">
           {items.map((item) => {
-            const unit = computeProductPrice(item.product.weight, item.product.wage, goldPrice);
+            const unit = computeProductPrice(
+              item.product.weight,
+              item.product.wage,
+              goldPrice,
+              discountPercent
+            );
             const line = unit * item.quantity;
             totalGrams += item.product.weight * item.quantity;
             totalWage += item.product.wage * item.quantity;
             totalPrice += line;
+            basePrice += (item.product.weight * goldPrice + item.product.wage) * item.quantity;
             return (
               <div key={item.id} className="flex items-center justify-between py-3 text-sm">
                 <div>
@@ -70,6 +84,15 @@ export default async function CheckoutPage() {
         <div className="border-t border-border mt-3 pt-3 space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">مجموع وزن طلا</span><span className="font-medium">{toPersianDigits(formatGram(totalGrams))}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">مجموع اجرت</span><span className="font-medium">{toPersianDigits(formatToman(totalWage))}</span></div>
+          {discountPercent > 0 && (
+            <>
+              <div className="flex justify-between"><span className="text-muted-foreground">جمع بدون تخفیف</span><span className="font-medium">{toPersianDigits(formatToman(basePrice))}</span></div>
+              <div className="flex justify-between text-emerald-700">
+                <span>تخفیف اختصاصی ({toPersianDigits(formatPercent(discountPercent))}٪)</span>
+                <span className="font-medium">− {toPersianDigits(formatToman(basePrice - totalPrice))}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between text-base"><span className="font-bold text-navy">مبلغ کل</span><span className="font-extrabold text-navy">{toPersianDigits(formatToman(totalPrice))}</span></div>
         </div>
       </Card>

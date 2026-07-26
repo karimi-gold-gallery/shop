@@ -11,6 +11,8 @@ model User {
   username     String     @unique
   passwordHash String
   role         String     @default("CUSTOMER")
+  /// Personal discount (0-100 %) applied to every price this customer sees.
+  discountPercent Float   @default(0)
   firstName    String?
   lastName     String?
   birthDate    String?
@@ -98,6 +100,8 @@ model Order {
   totalGrams Float
   totalWage  Float
   goldPrice  Float
+  /// Customer discount (0-100 %) that was in effect when the order was placed.
+  discountPercent Float  @default(0)
   totalPrice Float
   note       String?
   createdAt  DateTime    @default(now())

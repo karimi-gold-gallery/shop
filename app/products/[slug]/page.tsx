@@ -4,8 +4,14 @@ import type { Metadata } from "next";
 import { ChevronLeft, ShoppingBag, Weight, Tag, Layers } from "lucide-react";
 
 import { getProductBySlug, getProducts, getCategories } from "@/lib/products";
-import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
-import { formatGram, formatToman, toPersianDigits } from "@/lib/format";
+import { computeBaseProductPrice, computeProductPrice } from "@/lib/gold-price";
+import { getViewerPricing } from "@/lib/pricing";
+import {
+  formatGram,
+  formatPercent,
+  formatToman,
+  toPersianDigits,
+} from "@/lib/format";
 import { AddToCartButton } from "@/components/add-to-cart-button";
 import { ProductCard } from "@/components/product-card";
 import { Badge } from "@/components/ui/badge";
@@ -32,15 +38,21 @@ function safeDecodeSlug(slug: string): string {
 export default async function ProductDetailPage({ params }: Props) {
   const { slug: rawSlug } = await params;
   const slug = safeDecodeSlug(rawSlug);
-  const [product, goldPrice, categories] = await Promise.all([
+  const [product, { goldPrice, discountPercent }, categories] = await Promise.all([
     getProductBySlug(slug),
-    getGoldPricePerGram(),
+    getViewerPricing(),
     getCategories(),
   ]);
 
   if (!product || !product.active) notFound();
 
-  const price = computeProductPrice(product.weight, product.wage, goldPrice);
+  const basePrice = computeBaseProductPrice(product.weight, product.wage, goldPrice);
+  const price = computeProductPrice(
+    product.weight,
+    product.wage,
+    goldPrice,
+    discountPercent
+  );
   const mainImage = product.images[0];
 
   const related = (await getProducts({ categorySlug: product.category.slug, limit: 5 }))
@@ -110,9 +122,21 @@ export default async function ProductDetailPage({ params }: Props) {
             <div className="mt-5 flex items-end justify-between border-t border-border pt-4">
               <div>
                 <p className="text-xs text-muted-foreground">قیمت نهایی محصول</p>
+                {discountPercent > 0 && (
+                  <p className="text-sm text-muted-foreground line-through">
+                    {toPersianDigits(formatToman(basePrice))}
+                  </p>
+                )}
                 <p className="text-2xl font-extrabold text-navy">
                   {toPersianDigits(formatToman(price))}
                 </p>
+                {discountPercent > 0 && (
+                  <p className="mt-1 text-xs font-medium text-emerald-700">
+                    شامل {toPersianDigits(formatPercent(discountPercent))}٪ تخفیف
+                    اختصاصی شما ({toPersianDigits(formatToman(basePrice - price))}{" "}
+                    تخفیف)
+                  </p>
+                )}
               </div>
               <AddToCartButton productId={product.id} variant="gold" size="lg" />
             </div>
@@ -132,7 +156,12 @@ export default async function ProductDetailPage({ params }: Props) {
           <h2 className="text-xl font-bold text-navy mb-5">محصولات مرتبط</h2>
           <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
             {related.map((p) => (
-              <ProductCard key={p.id} product={p} goldPrice={goldPrice} />
+              <ProductCard
+                key={p.id}
+                product={p}
+                goldPrice={goldPrice}
+                discountPercent={discountPercent}
+              />
             ))}
           </div>
         </section>

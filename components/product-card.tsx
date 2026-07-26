@@ -1,17 +1,29 @@
 import Link from "next/link";
 
 import type { ProductCardData } from "@/lib/products";
-import { computeProductPrice } from "@/lib/gold-price";
-import { formatGram, formatToman, toPersianDigits } from "@/lib/format";
+import {
+  computeBaseProductPrice,
+  computeProductPrice,
+  normalizeDiscountPercent,
+} from "@/lib/gold-price";
+import {
+  formatGram,
+  formatPercent,
+  formatToman,
+  toPersianDigits,
+} from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 
 type Props = {
   product: ProductCardData;
   goldPrice: number;
+  discountPercent?: number;
 };
 
-export function ProductCard({ product, goldPrice }: Props) {
-  const price = computeProductPrice(product.weight, product.wage, goldPrice);
+export function ProductCard({ product, goldPrice, discountPercent = 0 }: Props) {
+  const discount = normalizeDiscountPercent(discountPercent);
+  const basePrice = computeBaseProductPrice(product.weight, product.wage, goldPrice);
+  const price = computeProductPrice(product.weight, product.wage, goldPrice, discount);
   const image = product.images[0];
 
   return (
@@ -36,6 +48,13 @@ export function ProductCard({ product, goldPrice }: Props) {
         <div className="absolute top-2 right-2">
           <Badge variant="gold" className="shadow-sm">{product.category.name}</Badge>
         </div>
+        {discount > 0 && (
+          <div className="absolute top-2 left-2">
+            <Badge variant="success" className="shadow-sm">
+              {toPersianDigits(formatPercent(discount))}٪ تخفیف
+            </Badge>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-4">
@@ -52,6 +71,11 @@ export function ProductCard({ product, goldPrice }: Props) {
             <span className="text-[11px] text-muted-foreground">
               وزن: {toPersianDigits(formatGram(product.weight))}
             </span>
+            {discount > 0 && (
+              <span className="text-[11px] text-muted-foreground line-through">
+                {toPersianDigits(formatToman(basePrice))}
+              </span>
+            )}
             <span className="font-bold text-navy text-sm sm:text-base">
               {toPersianDigits(formatToman(price))}
             </span>

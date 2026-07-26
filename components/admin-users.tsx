@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/admin";
 import type { UserLevel } from "@/lib/user-levels";
 import { LEVEL_LABELS } from "@/lib/user-levels";
+import { formatPercent, toPersianDigits } from "@/lib/format";
 import { DigitsInput } from "@/components/digits-input";
 import { JalaliDatePicker } from "@/components/jalali-date-picker";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ export type AdminUserRow = {
   postalCode: string | null;
   birthDate: string | null;
   gender: string | null;
+  discountPercent: number;
   onboarded: boolean;
   name: string;
   level: UserLevel;
@@ -83,6 +85,7 @@ export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {
           <TableHead>تلفن</TableHead>
           <TableHead>شهر</TableHead>
           <TableHead>مجموع خرید</TableHead>
+          <TableHead>تخفیف</TableHead>
           <TableHead>سطح</TableHead>
           <TableHead>عضویت</TableHead>
           <TableHead>تاریخ ثبت‌نام</TableHead>
@@ -93,7 +96,7 @@ export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {
         {users.length === 0 && (
           <TableRow>
             <TableCell
-              colSpan={8}
+              colSpan={9}
               className="py-10 text-center text-muted-foreground"
             >
               هنوز مشتری‌ای ثبت‌نام نکرده است.
@@ -116,6 +119,15 @@ export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {
             <TableCell className="text-sm">{user.city || "—"}</TableCell>
             <TableCell className="font-semibold text-navy">
               {user.totalSpentLabel}
+            </TableCell>
+            <TableCell>
+              {user.discountPercent > 0 ? (
+                <Badge variant="success">
+                  {toPersianDigits(formatPercent(user.discountPercent))}٪
+                </Badge>
+              ) : (
+                <span className="text-sm text-muted-foreground">—</span>
+              )}
             </TableCell>
             <TableCell>
               <Badge variant={LEVEL_BADGE[user.level]}>
@@ -225,6 +237,9 @@ export function CreateUserButton() {
               />
             </div>
             <Field label="شهر" name="city" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DiscountField id="create-discount" defaultValue="" />
           </div>
           {state?.error && (
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -366,6 +381,12 @@ function UserEditDialog({ user }: { user: AdminUserRow }) {
               />
             </div>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DiscountField
+              id={`discount-${user.id}`}
+              defaultValue={user.discountPercent ? String(user.discountPercent) : ""}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor={`address-${user.id}`}>آدرس</Label>
             <Textarea
@@ -482,6 +503,32 @@ function GenderSelect({
           <SelectItem value="FEMALE">خانم</SelectItem>
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+function DiscountField({
+  id,
+  defaultValue,
+}: {
+  id: string;
+  defaultValue: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>درصد تخفیف اختصاصی</Label>
+      <DigitsInput
+        id={id}
+        name="discountPercent"
+        defaultValue={defaultValue}
+        inputMode="decimal"
+        placeholder="۰"
+        dir="ltr"
+        className="text-right"
+      />
+      <p className="text-xs text-muted-foreground">
+        عددی بین ۰ تا ۱۰۰. روی قیمت همه محصولات این مشتری اعمال می‌شود.
+      </p>
     </div>
   );
 }

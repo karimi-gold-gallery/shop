@@ -6,7 +6,13 @@ import { Phone, PhoneCall, MapPin, AtSign, Copy, CheckCircle2 } from "lucide-rea
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getShopInfo } from "@/lib/shop";
-import { formatGram, formatToman, toPersianDigits, formatDateJalali } from "@/lib/format";
+import {
+  formatGram,
+  formatPercent,
+  formatToman,
+  toPersianDigits,
+  formatDateJalali,
+} from "@/lib/format";
 import { OrderCodeBox } from "@/components/order-code-box";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -40,6 +46,7 @@ export default async function OrderPage({ params }: Props) {
 
   const status = STATUS_LABEL[order.status] ?? STATUS_LABEL.PENDING;
   const { phone, mobile, address, instagram } = getShopInfo();
+  const basePrice = order.totalGrams * order.goldPrice + order.totalWage;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -84,6 +91,15 @@ export default async function OrderPage({ params }: Props) {
         <div className="border-t border-border mt-3 pt-3 space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">مجموع وزن طلا</span><span className="font-medium">{toPersianDigits(formatGram(order.totalGrams))}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">قیمت هر گرم طلا (زمان ثبت)</span><span className="font-medium">{toPersianDigits(formatToman(order.goldPrice))}</span></div>
+          {order.discountPercent > 0 && (
+            <>
+              <div className="flex justify-between"><span className="text-muted-foreground">جمع بدون تخفیف</span><span className="font-medium">{toPersianDigits(formatToman(basePrice))}</span></div>
+              <div className="flex justify-between text-emerald-700">
+                <span>تخفیف اختصاصی ({toPersianDigits(formatPercent(order.discountPercent))}٪)</span>
+                <span className="font-medium">− {toPersianDigits(formatToman(basePrice - order.totalPrice))}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between text-base"><span className="font-bold text-navy">مبلغ کل</span><span className="font-extrabold text-navy">{toPersianDigits(formatToman(order.totalPrice))}</span></div>
         </div>
       </Card>
