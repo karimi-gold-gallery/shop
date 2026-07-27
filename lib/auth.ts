@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
-import { prisma } from "@/lib/prisma";
-import type { User } from "@prisma/client";
+import { db } from "@/lib/db";
+import { sessions, type User } from "@/lib/db/schema";
 
 export const SESSION_COOKIE = "karimi_session";
 const SESSION_TTL_DAYS = 30;
@@ -30,9 +31,7 @@ export async function verifyPassword(
 export async function createSession(userId: string): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-  await prisma.session.create({
-    data: { token, userId, expiresAt },
-  });
+  await db.insert(sessions).values({ token, userId, expiresAt });
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -48,13 +47,16 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: { user: true },
+  const session = await db.query.sessions.findFirst({
+    where: eq(sessions.token, token),
+    with: { user: true },
   });
   if (!session) return null;
   if (session.expiresAt < new Date()) {
-    await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
+    await db
+      .delete(sessions)
+      .where(eq(sessions.id, session.id))
+      .catch(() => {});
     const s = await cookies();
     s.delete(SESSION_COOKIE);
     return null;
@@ -66,7 +68,10 @@ export async function signOut(): Promise<void> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) {
-    await prisma.session.deleteMany({ where: { token } }).catch(() => {});
+    await db
+      .delete(sessions)
+      .where(eq(sessions.token, token))
+      .catch(() => {});
   }
   store.delete(SESSION_COOKIE);
 }

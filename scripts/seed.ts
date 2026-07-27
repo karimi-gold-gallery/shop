@@ -1,14 +1,17 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
+import * as schema from "../lib/db/schema";
 
-function svgImage(label: string, variant: string): { data: Uint8Array; mimeType: string } {
+const { categories, productImages, products, settings, users } = schema;
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle(pool, { schema });
+
+function svgImage(label: string, variant: string): { data: Buffer; mimeType: string } {
   const palettes: Record<string, [string, string]> = {
     ring: ["#d4af37", "#8a6a2e"],
     necklace: ["#e6c668", "#a98330"],
@@ -42,7 +45,7 @@ function svgImage(label: string, variant: string): { data: Uint8Array; mimeType:
   ${shapes[variant] ?? shapes.ring}
   <text x="300" y="350" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="30" fill="#2a241c" font-weight="bold">${label}</text>
 </svg>`;
-  return { data: new TextEncoder().encode(svg), mimeType: "image/svg+xml" };
+  return { data: Buffer.from(svg, "utf8"), mimeType: "image/svg+xml" };
 }
 
 async function main() {
@@ -51,10 +54,9 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
-  await prisma.user.upsert({
-    where: { username: adminUsername },
-    update: { role: "ADMIN", onboarded: true, passwordHash },
-    create: {
+  await db
+    .insert(users)
+    .values({
       username: adminUsername,
       passwordHash,
       role: "ADMIN",
@@ -62,14 +64,16 @@ async function main() {
       firstName: "مدیر",
       lastName: "کریمی",
       phone: "09120000000",
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: users.username,
+      set: { role: "ADMIN", onboarded: true, passwordHash },
+    });
 
-  await prisma.setting.upsert({
-    where: { key: "goldPricePerGram" },
-    update: {},
-    create: { key: "goldPricePerGram", value: "4500000" },
-  });
+  await db
+    .insert(settings)
+    .values({ key: "goldPricePerGram", value: "4500000" })
+    .onConflictDoNothing({ target: settings.key });
 
   const categoriesData = [
     { name: "انگشتر", slug: "ring", description: "انگشترهای طلای زنانه و مردانه" },
@@ -80,17 +84,20 @@ async function main() {
     { name: "زنجیر", slug: "chain", description: "زنجیرهای طلای با کیفیت" },
   ];
 
-  const categories: Record<string, string> = {};
+  const categoryIds: Record<string, string> = {};
   for (const c of categoriesData) {
-    const cat = await prisma.category.upsert({
-      where: { slug: c.slug },
-      update: { name: c.name, description: c.description },
-      create: c,
-    });
-    categories[c.slug] = cat.id;
+    const [cat] = await db
+      .insert(categories)
+      .values(c)
+      .onConflictDoUpdate({
+        target: categories.slug,
+        set: { name: c.name, description: c.description },
+      })
+      .returning({ id: categories.id });
+    categoryIds[c.slug] = cat!.id;
   }
 
-  const products = [
+  const seedProducts = [
     {
       name: "انگشتر طلای سلطنتی",
       category: "ring",
@@ -189,30 +196,32 @@ async function main() {
     },
   ];
 
-  for (const p of products) {
+  for (const p of seedProducts) {
     const slug = `${p.variant}-${p.name.replace(/\s+/g, "-")}`;
-    const existing = await prisma.product.findUnique({ where: { slug } });
+    const existing = await db.query.products.findFirst({
+      where: eq(products.slug, slug),
+      columns: { id: true },
+    });
     if (existing) continue;
 
-    const product = await prisma.product.create({
-      data: {
+    const [product] = await db
+      .insert(products)
+      .values({
         name: p.name,
         slug,
         description: p.description,
         weight: p.weight,
         wage: p.wage,
-        categoryId: categories[p.category],
+        categoryId: categoryIds[p.category]!,
         active: true,
-      },
-    });
+      })
+      .returning({ id: products.id });
 
     const img = svgImage(p.name, p.variant);
-    await prisma.productImage.create({
-      data: {
-        productId: product.id,
-        data: img.data,
-        mimeType: img.mimeType,
-      },
+    await db.insert(productImages).values({
+      productId: product!.id,
+      data: img.data,
+      mimeType: img.mimeType,
     });
   }
 
@@ -225,5 +234,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await pool.end();
   });

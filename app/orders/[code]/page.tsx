@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Phone, PhoneCall, MapPin, AtSign, Copy, CheckCircle2 } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { orders } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { getShopInfo } from "@/lib/shop";
 import {
@@ -36,9 +39,9 @@ export default async function OrderPage({ params }: Props) {
   const { code } = await params;
   const user = await getCurrentUser();
 
-  const order = await prisma.order.findUnique({
-    where: { code },
-    include: { items: true },
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.code, code),
+    with: { items: true },
   });
 
   if (!order) notFound();

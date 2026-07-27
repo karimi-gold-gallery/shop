@@ -1,12 +1,15 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
+import * as schema from "../lib/db/schema";
+
+const { users } = schema;
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle(pool, { schema });
 
 const firstNames = [
   "علی", "مریم", "حسین", "زهرا", "محمد", "فاطمه", "رضا", "سارا", "امیر", "نرگس",
@@ -31,7 +34,10 @@ async function main() {
 
   for (let i = 1; i <= 30; i++) {
     const username = `user${String(i).padStart(2, "0")}`;
-    const existing = await prisma.user.findUnique({ where: { username } });
+    const existing = await db.query.users.findFirst({
+      where: eq(users.username, username),
+      columns: { id: true },
+    });
     if (existing) {
       skipped += 1;
       continue;
@@ -42,19 +48,17 @@ async function main() {
     const gender = i % 2 === 0 ? "FEMALE" : "MALE";
     const phone = `0912${String(1000000 + i).slice(1)}`;
 
-    await prisma.user.create({
-      data: {
-        username,
-        passwordHash,
-        role: "CUSTOMER",
-        firstName,
-        lastName,
-        birthDate: `۱۳۷${i % 10}/0${(i % 9) + 1}/1${i % 9}`,
-        gender,
-        phone,
-        city: cities[(i - 1) % cities.length],
-        onboarded: true,
-      },
+    await db.insert(users).values({
+      username,
+      passwordHash,
+      role: "CUSTOMER",
+      firstName,
+      lastName,
+      birthDate: `۱۳۷${i % 10}/0${(i % 9) + 1}/1${i % 9}`,
+      gender,
+      phone,
+      city: cities[(i - 1) % cities.length],
+      onboarded: true,
     });
     created += 1;
   }
@@ -69,5 +73,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await pool.end();
   });

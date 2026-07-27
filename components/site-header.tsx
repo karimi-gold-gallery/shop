@@ -2,8 +2,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { Diamond, ShoppingBag, User } from "lucide-react";
 
+import { eq } from "drizzle-orm";
+
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { countRows } from "@/lib/db";
+import { cartItems } from "@/lib/db/schema";
 import { getGoldPricePerGram } from "@/lib/gold-price";
 import { toPersianDigits, formatNumber } from "@/lib/format";
 import { SearchBox } from "@/components/search-box";
@@ -32,7 +35,7 @@ export async function SiteHeader() {
   const [user, categories] = await Promise.all([getCurrentUser(), getCategories()]);
   let cartCount = 0;
   if (user) {
-    cartCount = await prisma.cartItem.count({ where: { userId: user.id } });
+    cartCount = await countRows(cartItems, eq(cartItems.userId, user.id));
   }
 
   return (

@@ -1,4 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { settings } from "@/lib/db/schema";
 
 export const GOLD_PRICE_SETTING_KEY = "goldPricePerGram";
 
@@ -6,19 +9,21 @@ export const GOLD_PRICE_SETTING_KEY = "goldPricePerGram";
 export const DEFAULT_GOLD_PRICE_PER_GRAM = 4_500_000;
 
 export async function getGoldPricePerGram(): Promise<number> {
-  const setting = await prisma.setting.findUnique({
-    where: { key: GOLD_PRICE_SETTING_KEY },
+  const setting = await db.query.settings.findFirst({
+    where: eq(settings.key, GOLD_PRICE_SETTING_KEY),
   });
   const value = Number(setting?.value);
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_GOLD_PRICE_PER_GRAM;
 }
 
 export async function setGoldPricePerGram(price: number): Promise<void> {
-  await prisma.setting.upsert({
-    where: { key: GOLD_PRICE_SETTING_KEY },
-    update: { value: String(price) },
-    create: { key: GOLD_PRICE_SETTING_KEY, value: String(price) },
-  });
+  await db
+    .insert(settings)
+    .values({ key: GOLD_PRICE_SETTING_KEY, value: String(price) })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: String(price) },
+    });
 }
 
 export const MAX_DISCOUNT_PERCENT = 100;

@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ChevronLeft, User, Phone, MapPin } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { orders } from "@/lib/db/schema";
 import {
   toPersianDigits,
   formatToman,
@@ -27,15 +30,18 @@ const STATUS_LABEL: Record<string, { label: string; variant: "gold" | "success" 
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const order = await prisma.order.findUnique({ where: { id } });
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, id),
+    columns: { code: true },
+  });
   return { title: order ? `سفارش ${order.code}` : "سفارش" };
 }
 
 export default async function AdminOrderDetailPage({ params }: Props) {
   const { id } = await params;
-  const order = await prisma.order.findUnique({
-    where: { id },
-    include: {
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, id),
+    with: {
       user: true,
       items: true,
     },

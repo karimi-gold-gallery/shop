@@ -37,7 +37,7 @@ Admins can:
 | UI | **React 19**, Tailwind CSS 4, Radix UI, CVA, lucide-react |
 | Language | TypeScript |
 | Validation | Zod 4 |
-| Database | **PostgreSQL** via **Prisma 7** (`@prisma/adapter-pg` + `pg`) |
+| Database | **PostgreSQL** via **Drizzle ORM** (`drizzle-orm/node-postgres` + `pg`) |
 | Auth | Custom cookie sessions + **bcryptjs** |
 | Dates | Jalali via `react-multi-date-picker` |
 | Toasts | sonner |
@@ -50,14 +50,17 @@ Admins can:
 | `npm run dev` | Local development |
 | `npm run build` / `start` | Production build & serve |
 | `npm run lint` | ESLint |
-| `npm run db:push` | Push Prisma schema to DB |
+| `npm run db:push` | Push the Drizzle schema to the DB (`drizzle-kit push`) |
+| `npm run db:generate` | Generate a SQL migration from schema changes |
+| `npm run db:migrate` | Apply generated migrations |
+| `npm run db:studio` | Open Drizzle Studio |
 | `npm run seed` | Seed admin, categories, sample products, gold price |
-| `postinstall` | `prisma generate` |
+| `npm run seed:users` | Seed 30 sample customer accounts |
 
 ### Notable config
 
 - `next.config.ts`: Turbopack root pinned; Server Actions body limit **10mb** (product image uploads)
-- `prisma.config.ts`: schema path, migrations, seed command, `DATABASE_URL`
+- `drizzle.config.ts`: schema path (`lib/db/schema.ts`), migration output dir, `DATABASE_URL`
 - No `middleware.ts` — auth is enforced in layouts and server helpers
 
 ---
@@ -185,7 +188,7 @@ Thresholds live in `LEVEL_THRESHOLDS` and are easy to change later.
 
 ### Roles
 
-Stored as string on `User.role` (not Prisma enums):
+Stored as a plain string on `User.role` (not a Postgres enum):
 
 | Role | Who |
 |------|-----|
@@ -249,9 +252,14 @@ Admins can create customers from `/admin/users` (bypassing self-registration); t
 
 ## 5. Database schema
 
-File: `prisma/schema.prisma`  
-Provider: PostgreSQL (`DATABASE_URL` via `prisma.config.ts`)  
-IDs: `cuid()`
+File: `lib/db/schema.ts` (Drizzle), client in `lib/db/index.ts`  
+Provider: PostgreSQL (`DATABASE_URL` via `drizzle.config.ts`)  
+IDs: cuid2, generated client-side by the schema's `$defaultFn`
+
+Table names are PascalCase and column names camelCase (both quoted), matching the
+database as it was originally created — no rename migration was needed.
+`createdAt` defaults to `CURRENT_TIMESTAMP` in the DB; `updatedAt` is written by
+the client on every insert and update (`$defaultFn` / `$onUpdate`).
 
 ### Entity relationship overview
 
@@ -597,10 +605,10 @@ Seed also creates gold price setting `4500000`, six categories, and sample produ
 
 ### Optional sample customers
 
-`prisma/seed-users.ts` — creates **30** sample `CUSTOMER` accounts (`user01` … `user30`, password `User12345`). Skips existing usernames.
+`scripts/seed-users.ts` — creates **30** sample `CUSTOMER` accounts (`user01` … `user30`, password `User12345`). Skips existing usernames.
 
 ```bash
-./node_modules/.bin/tsx prisma/seed-users.ts
+npm run seed:users
 ```
 
 ### Legacy
@@ -638,9 +646,11 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 
 | Concern | Path |
 |---------|------|
-| Prisma schema | `prisma/schema.prisma` |
-| Seed | `prisma/seed.ts` |
-| Sample users seed | `prisma/seed-users.ts` |
+| Drizzle schema | `lib/db/schema.ts` |
+| Drizzle client / helpers | `lib/db/index.ts` |
+| Drizzle config | `drizzle.config.ts` |
+| Seed | `scripts/seed.ts` |
+| Sample users seed | `scripts/seed-users.ts` |
 | Auth helpers | `lib/auth.ts` |
 | Auth actions | `app/actions/auth.ts` |
 | Login API | `app/api/auth/login/route.ts` |

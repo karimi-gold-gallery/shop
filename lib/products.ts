@@ -1,5 +1,7 @@
-import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { and, asc, desc, eq, inArray, like, or, type SQL } from "drizzle-orm";
+
+import { countRows, db } from "@/lib/db";
+import { categories, products } from "@/lib/db/schema";
 import { computeProductPrice } from "@/lib/gold-price";
 import type { ProductSearchFilters, ProductSort } from "@/lib/product-search";
 import {
@@ -8,7 +10,8 @@ import {
   type Pagination,
 } from "@/lib/pagination";
 
-export const productSelect = {
+/** Columns every product listing needs, plus its category and a cover image. */
+export const productColumns = {
   id: true,
   name: true,
   slug: true,
@@ -18,9 +21,10 @@ export const productSelect = {
   active: true,
   categoryId: true,
   createdAt: true,
-  category: { select: { id: true, name: true, slug: true } },
-  images: { select: { id: true, mimeType: true }, take: 1 },
 } as const;
+
+const categoryColumns = { id: true, name: true, slug: true } as const;
+const imageColumns = { id: true, mimeType: true } as const;
 
 export type ProductCardData = {
   id: string;
@@ -36,12 +40,17 @@ export type ProductCardData = {
   images: { id: string; mimeType: string }[];
 };
 
+/** Escape LIKE wildcards so a search term is always matched literally. */
+function likePattern(term: string): string {
+  return `%${term.replace(/([\\%_])/g, "\\$1")}%`;
+}
+
 function buildProductWhere(opts: {
   q?: string;
   categorySlug?: string;
   categorySlugs?: string[];
   onlyActive?: boolean;
-}): Prisma.ProductWhereInput {
+}): SQL | undefined {
   const {
     q,
     categorySlug,
@@ -49,19 +58,26 @@ function buildProductWhere(opts: {
     onlyActive = true,
   } = opts;
 
-  const where: Prisma.ProductWhereInput = {};
-  if (onlyActive) where.active = true;
+  const conditions: SQL[] = [];
+  if (onlyActive) conditions.push(eq(products.active, true));
   if (categorySlugs.length > 0) {
-    where.category = { slug: { in: categorySlugs } };
+    conditions.push(
+      inArray(
+        products.categoryId,
+        db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(inArray(categories.slug, categorySlugs))
+      )
+    );
   }
   if (q && q.trim()) {
-    const term = q.trim();
-    where.OR = [
-      { name: { contains: term } },
-      { description: { contains: term } },
-    ];
+    const pattern = likePattern(q.trim());
+    conditions.push(
+      or(like(products.name, pattern), like(products.description, pattern))!
+    );
   }
-  return where;
+  return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
 export async function getProducts(opts: {
@@ -85,19 +101,23 @@ export async function getProducts(opts: {
 
   const where = buildProductWhere({ q, categorySlug, categorySlugs, onlyActive });
 
-  const products = await prisma.product.findMany({
+  const found = await db.query.products.findMany({
     where,
-    select: productSelect,
-    orderBy: { createdAt: "desc" },
-    take: limit,
+    columns: productColumns,
+    with: {
+      category: { columns: categoryColumns },
+      images: { columns: imageColumns, limit: 1 },
+    },
+    orderBy: desc(products.createdAt),
+    limit,
   });
 
   const needsPriceProcessing =
     goldPricePerGram !== undefined && sort !== "newest";
 
-  if (!needsPriceProcessing) return products;
+  if (!needsPriceProcessing) return found;
 
-  let priced = products.map((product) => ({
+  const priced = found.map((product) => ({
     product,
     price: computeProductPrice(product.weight, product.wage, goldPricePerGram!),
   }));
@@ -123,28 +143,32 @@ export async function getFilteredProductsPage(
     onlyActive: true,
   });
 
-  const total = await prisma.product.count({ where });
+  const total = await countRows(products, where);
   const pagination = buildPagination(pageInput, total, pageSize);
 
   if (total === 0) {
     return { products: [], pagination };
   }
 
-  let products: ProductCardData[];
+  let page: ProductCardData[];
 
   if (filters.sort === "newest") {
-    products = await prisma.product.findMany({
+    page = await db.query.products.findMany({
       where,
-      select: productSelect,
-      orderBy: { createdAt: "desc" },
-      skip: pagination.skip,
-      take: pagination.take,
+      columns: productColumns,
+      with: {
+        category: { columns: categoryColumns },
+        images: { columns: imageColumns, limit: 1 },
+      },
+      orderBy: desc(products.createdAt),
+      offset: pagination.skip,
+      limit: pagination.take,
     });
   } else {
     // Price sort is computed from weight/wage + live gold price — page in DB by id order after ranking.
-    const ranked = await prisma.product.findMany({
+    const ranked = await db.query.products.findMany({
       where,
-      select: { id: true, weight: true, wage: true },
+      columns: { id: true, weight: true, wage: true },
     });
 
     ranked.sort((a, b) => {
@@ -161,17 +185,21 @@ export async function getFilteredProductsPage(
       return { products: [], pagination };
     }
 
-    const fetched = await prisma.product.findMany({
-      where: { id: { in: pageIds } },
-      select: productSelect,
+    const fetched = await db.query.products.findMany({
+      where: inArray(products.id, pageIds),
+      columns: productColumns,
+      with: {
+        category: { columns: categoryColumns },
+        images: { columns: imageColumns, limit: 1 },
+      },
     });
     const byId = new Map(fetched.map((p) => [p.id, p]));
-    products = pageIds
+    page = pageIds
       .map((id) => byId.get(id))
       .filter((p): p is ProductCardData => Boolean(p));
   }
 
-  return { products, pagination };
+  return { products: page, pagination };
 }
 
 export async function getFilteredProducts(
@@ -187,18 +215,23 @@ export async function getFilteredProducts(
 }
 
 export async function getProductBySlug(slug: string) {
-  return prisma.product.findUnique({
-    where: { slug },
-    select: {
-      ...productSelect,
-      images: { select: { id: true, mimeType: true }, orderBy: { createdAt: "asc" } },
+  const product = await db.query.products.findFirst({
+    where: eq(products.slug, slug),
+    columns: productColumns,
+    with: {
+      category: { columns: categoryColumns },
+      images: {
+        columns: imageColumns,
+        orderBy: (image, { asc: ascending }) => ascending(image.createdAt),
+      },
     },
   });
+  return product ?? null;
 }
 
 export async function getCategories() {
-  return prisma.category.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, slug: true, description: true },
+  return db.query.categories.findMany({
+    orderBy: asc(categories.name),
+    columns: { id: true, name: true, slug: true, description: true },
   });
 }

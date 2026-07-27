@@ -2,7 +2,11 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ChevronLeft } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { desc } from "drizzle-orm";
+
+import { countRows, db } from "@/lib/db";
+import { orders as ordersTable } from "@/lib/db/schema";
+import { getOrderItemCounts } from "@/lib/orders";
 import { toPersianDigits, formatToman, formatDateJalali } from "@/lib/format";
 import { buildPagination, buildPagedHref, parsePageParam } from "@/lib/pagination";
 import { PaginationControls } from "@/components/pagination-controls";
@@ -30,17 +34,24 @@ export default async function AdminOrdersPage({
   const raw = await searchParams;
   const page = parsePageParam(raw.page);
 
-  const total = await prisma.order.count();
+  const total = await countRows(ordersTable);
   const pagination = buildPagination(page, total);
-  const orders = await prisma.order.findMany({
-    include: {
-      user: { select: { firstName: true, lastName: true, username: true, phone: true } },
-      _count: { select: { items: true } },
+  const orderRows = await db.query.orders.findMany({
+    with: {
+      user: {
+        columns: { firstName: true, lastName: true, username: true, phone: true },
+      },
     },
-    orderBy: { createdAt: "desc" },
-    skip: pagination.skip,
-    take: pagination.take,
+    orderBy: desc(ordersTable.createdAt),
+    offset: pagination.skip,
+    limit: pagination.take,
   });
+
+  const itemCounts = await getOrderItemCounts(orderRows.map((o) => o.id));
+  const orders = orderRows.map((order) => ({
+    ...order,
+    itemCount: itemCounts.get(order.id) ?? 0,
+  }));
 
   return (
     <div className="space-y-5">
@@ -95,7 +106,7 @@ export default async function AdminOrdersPage({
                   <TableCell className="text-xs">
                     {toPersianDigits(formatDateJalali(o.createdAt))}
                   </TableCell>
-                  <TableCell>{toPersianDigits(o._count.items)}</TableCell>
+                  <TableCell>{toPersianDigits(o.itemCount)}</TableCell>
                   <TableCell className="font-semibold text-navy">
                     {toPersianDigits(formatToman(o.totalPrice))}
                   </TableCell>

@@ -1,8 +1,11 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
+import { eq } from "drizzle-orm";
+
 import { createSession, getPostAuthRedirectPath, verifyPassword } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
 import { loginSchema } from "@/lib/schemas";
 
 export async function POST(request: Request) {
@@ -25,8 +28,8 @@ export async function POST(request: Request) {
 
   loginUrl.searchParams.set("username", parsed.data.username);
 
-  const user = await prisma.user.findUnique({
-    where: { username: parsed.data.username },
+  const user = await db.query.users.findFirst({
+    where: eq(users.username, parsed.data.username),
   });
 
   if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {

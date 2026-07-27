@@ -2,9 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { and, eq, ne } from "drizzle-orm";
 
-import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { countRows, db } from "@/lib/db";
+import {
+  cartItems,
+  categories,
+  orders,
+  productImages,
+  products,
+  sessions,
+  users,
+  type NewProductImage,
+  type NewUser,
+} from "@/lib/db/schema";
 import { requireAdmin, hashPassword } from "@/lib/auth";
 import { setGoldPricePerGram } from "@/lib/gold-price";
 import { slugify } from "@/lib/slug";
@@ -35,9 +46,9 @@ export async function createCategoryAction(
   const name = parsed.data.name;
   const slug = slugify(name);
   try {
-    await prisma.category.create({
-      data: { name, slug, description: parsed.data.description || null },
-    });
+    await db
+      .insert(categories)
+      .values({ name, slug, description: parsed.data.description || null });
   } catch {
     return { error: "این دسته‌بندی قبلاً وجود دارد" };
   }
@@ -59,13 +70,15 @@ export async function updateCategoryAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
   try {
-    await prisma.category.update({
-      where: { id },
-      data: {
+    const updated = await db
+      .update(categories)
+      .set({
         name: parsed.data.name,
         description: parsed.data.description || null,
-      },
-    });
+      })
+      .where(eq(categories.id, id))
+      .returning({ id: categories.id });
+    if (updated.length === 0) return { error: "به‌روزرسانی ناموفق بود" };
   } catch {
     return { error: "به‌روزرسانی ناموفق بود" };
   }
@@ -76,22 +89,24 @@ export async function updateCategoryAction(
 
 export async function deleteCategoryAction(id: string): Promise<void> {
   await requireAdmin();
-  const count = await prisma.product.count({ where: { categoryId: id } });
+  const count = await countRows(products, eq(products.categoryId, id));
   if (count > 0) {
     throw new Error("این دسته دارای محصول است و قابل حذف نیست");
   }
-  await prisma.category.delete({ where: { id } });
+  await db.delete(categories).where(eq(categories.id, id));
   revalidatePath("/admin/categories");
   revalidatePath("/products");
 }
 
 /* ----------------------------- Products ----------------------------- */
 
-async function readImages(formData: FormData): Promise<Prisma.ProductImageCreateWithoutProductInput[]> {
+type NewImage = Omit<NewProductImage, "productId">;
+
+async function readImages(formData: FormData): Promise<NewImage[]> {
   const files = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
-  const images: Prisma.ProductImageCreateWithoutProductInput[] = [];
+  const images: NewImage[] = [];
   for (const file of files) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const bytes = Buffer.from(await file.arrayBuffer());
     images.push({
       data: bytes,
       mimeType: file.type || "image/png",
@@ -119,17 +134,25 @@ export async function createProductAction(
   const images = await readImages(formData);
 
   try {
-    await prisma.product.create({
-      data: {
-        name: parsed.data.name,
-        slug,
-        description: parsed.data.description || null,
-        weight: parsed.data.weight,
-        wage: parsed.data.wage,
-        categoryId: parsed.data.categoryId,
-        active: parsed.data.active,
-        images: { create: images },
-      },
+    await db.transaction(async (tx) => {
+      const [product] = await tx
+        .insert(products)
+        .values({
+          name: parsed.data.name,
+          slug,
+          description: parsed.data.description || null,
+          weight: parsed.data.weight,
+          wage: parsed.data.wage,
+          categoryId: parsed.data.categoryId,
+          active: parsed.data.active,
+        })
+        .returning({ id: products.id });
+
+      if (images.length > 0) {
+        await tx
+          .insert(productImages)
+          .values(images.map((image) => ({ ...image, productId: product!.id })));
+      }
     });
   } catch {
     return { error: "ایجاد محصول ناموفق بود" };
@@ -159,18 +182,30 @@ export async function updateProductAction(
   const images = await readImages(formData);
 
   try {
-    await prisma.product.update({
-      where: { id },
-      data: {
-        name: parsed.data.name,
-        description: parsed.data.description || null,
-        weight: parsed.data.weight,
-        wage: parsed.data.wage,
-        categoryId: parsed.data.categoryId,
-        active: parsed.data.active,
-        ...(images.length > 0 ? { images: { create: images } } : {}),
-      },
+    const ok = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(products)
+        .set({
+          name: parsed.data.name,
+          description: parsed.data.description || null,
+          weight: parsed.data.weight,
+          wage: parsed.data.wage,
+          categoryId: parsed.data.categoryId,
+          active: parsed.data.active,
+        })
+        .where(eq(products.id, id))
+        .returning({ id: products.id });
+
+      if (updated.length === 0) return false;
+
+      if (images.length > 0) {
+        await tx
+          .insert(productImages)
+          .values(images.map((image) => ({ ...image, productId: id })));
+      }
+      return true;
     });
+    if (!ok) return { error: "به‌روزرسانی محصول ناموفق بود" };
   } catch {
     return { error: "به‌روزرسانی محصول ناموفق بود" };
   }
@@ -182,14 +217,14 @@ export async function updateProductAction(
 
 export async function deleteProductAction(id: string): Promise<void> {
   await requireAdmin();
-  await prisma.product.delete({ where: { id } });
+  await db.delete(products).where(eq(products.id, id));
   revalidatePath("/admin/products");
   revalidatePath("/products");
 }
 
 export async function deleteProductImageAction(imageId: string): Promise<void> {
   await requireAdmin();
-  await prisma.productImage.delete({ where: { id: imageId } });
+  await db.delete(productImages).where(eq(productImages.id, imageId));
   revalidatePath("/admin/products");
 }
 
@@ -203,17 +238,17 @@ export async function updateOrderStatusAction(
   const parsed = orderStatusSchema.safeParse(status);
   if (!parsed.success) throw new Error("وضعیت نامعتبر");
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: { status: parsed.data },
-  });
+  await db
+    .update(orders)
+    .set({ status: parsed.data })
+    .where(eq(orders.id, orderId));
   revalidatePath("/admin/orders");
   revalidatePath(`/orders`);
 }
 
 export async function deleteOrderAction(orderId: string): Promise<void> {
   await requireAdmin();
-  await prisma.order.delete({ where: { id: orderId } });
+  await db.delete(orders).where(eq(orders.id, orderId));
   revalidatePath("/admin/orders");
 }
 
@@ -252,26 +287,25 @@ export async function createUserAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const existing = await prisma.user.findUnique({
-    where: { username: parsed.data.username },
+  const existing = await db.query.users.findFirst({
+    where: eq(users.username, parsed.data.username),
+    columns: { id: true },
   });
   if (existing) return { error: "این نام کاربری قبلاً ثبت شده است" };
 
   const passwordHash = await hashPassword(parsed.data.password);
-  await prisma.user.create({
-    data: {
-      username: parsed.data.username,
-      passwordHash,
-      role: "CUSTOMER",
-      firstName: parsed.data.firstName,
-      lastName: parsed.data.lastName,
-      phone: parsed.data.phone,
-      gender: parsed.data.gender,
-      birthDate: parsed.data.birthDate,
-      city: parsed.data.city || null,
-      discountPercent: parsed.data.discountPercent,
-      onboarded: true,
-    },
+  await db.insert(users).values({
+    username: parsed.data.username,
+    passwordHash,
+    role: "CUSTOMER",
+    firstName: parsed.data.firstName,
+    lastName: parsed.data.lastName,
+    phone: parsed.data.phone,
+    gender: parsed.data.gender,
+    birthDate: parsed.data.birthDate,
+    city: parsed.data.city || null,
+    discountPercent: parsed.data.discountPercent,
+    onboarded: true,
   });
 
   revalidatePath("/admin/users");
@@ -301,20 +335,24 @@ export async function updateUserAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const user = await prisma.user.findUnique({ where: { id: parsed.data.id } });
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, parsed.data.id),
+    columns: { id: true, role: true },
+  });
   if (!user || user.role !== "CUSTOMER") {
     return { error: "کاربر یافت نشد" };
   }
 
-  const usernameTaken = await prisma.user.findFirst({
-    where: {
-      username: parsed.data.username,
-      NOT: { id: parsed.data.id },
-    },
+  const usernameTaken = await db.query.users.findFirst({
+    where: and(
+      eq(users.username, parsed.data.username),
+      ne(users.id, parsed.data.id)
+    ),
+    columns: { id: true },
   });
   if (usernameTaken) return { error: "این نام کاربری قبلاً ثبت شده است" };
 
-  const data: Prisma.UserUpdateInput = {
+  const data: Partial<NewUser> = {
     username: parsed.data.username,
     firstName: parsed.data.firstName,
     lastName: parsed.data.lastName,
@@ -334,7 +372,12 @@ export async function updateUserAction(
   }
 
   try {
-    await prisma.user.update({ where: { id: parsed.data.id }, data });
+    const updated = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, parsed.data.id))
+      .returning({ id: users.id });
+    if (updated.length === 0) return { error: "به‌روزرسانی کاربر ناموفق بود" };
   } catch {
     return { error: "به‌روزرسانی کاربر ناموفق بود" };
   }
@@ -348,22 +391,26 @@ export async function updateUserAction(
 export async function deleteUserAction(id: string): Promise<void> {
   await requireAdmin();
 
-  const user = await prisma.user.findUnique({
-    where: { id },
-    select: { id: true, role: true, _count: { select: { orders: true } } },
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    columns: { id: true, role: true },
   });
   if (!user || user.role !== "CUSTOMER") {
     throw new Error("کاربر یافت نشد");
   }
-  if (user._count.orders > 0) {
+
+  const orderCount = await countRows(orders, eq(orders.userId, id));
+  if (orderCount > 0) {
     throw new Error("این کاربر سفارش دارد و قابل حذف نیست");
   }
 
-  await prisma.$transaction([
-    prisma.session.deleteMany({ where: { userId: id } }),
-    prisma.cartItem.deleteMany({ where: { userId: id } }),
-    prisma.user.delete({ where: { id } }),
-  ]);
+  // Sessions and cart items cascade on delete, but we clear them explicitly so
+  // the whole removal stays a single atomic step.
+  await db.transaction(async (tx) => {
+    await tx.delete(sessions).where(eq(sessions.userId, id));
+    await tx.delete(cartItems).where(eq(cartItems.userId, id));
+    await tx.delete(users).where(eq(users.id, id));
+  });
 
   revalidatePath("/admin/users");
 }

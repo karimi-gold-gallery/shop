@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ShoppingBag, ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 
-import { prisma } from "@/lib/prisma";
+import { desc, eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { cartItems } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
 import { getUserDiscountPercent } from "@/lib/pricing";
@@ -33,14 +36,14 @@ export default async function CartPage() {
     );
   }
 
-  const items = await prisma.cartItem.findMany({
-    where: { userId: user.id },
-    include: {
+  const items = await db.query.cartItems.findMany({
+    where: eq(cartItems.userId, user.id),
+    with: {
       product: {
-        include: { category: true, images: { take: 1, select: { id: true } } },
+        with: { category: true, images: { columns: { id: true }, limit: 1 } },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: desc(cartItems.createdAt),
   });
 
   const goldPrice = await getGoldPricePerGram();

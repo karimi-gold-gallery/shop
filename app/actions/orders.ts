@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { desc, eq } from "drizzle-orm";
 
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { cartItems, orderItems, orders } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
 import { getUserDiscountPercent } from "@/lib/pricing";
@@ -14,9 +16,14 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
   if (!user.onboarded) redirect("/onboarding");
 
-  const items = await prisma.cartItem.findMany({
-    where: { userId: user.id },
-    include: { product: { include: { images: { take: 1, select: { id: true } } } } },
+  const items = await db.query.cartItems.findMany({
+    where: eq(cartItems.userId, user.id),
+    with: {
+      product: {
+        with: { images: { columns: { id: true }, limit: 1 } },
+      },
+    },
+    orderBy: desc(cartItems.createdAt),
   });
 
   if (items.length === 0) redirect("/cart");
@@ -31,7 +38,7 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
   let totalWage = 0;
   let totalPrice = 0;
 
-  const orderItems = items.map((item) => {
+  const lines = items.map((item) => {
     const unitPrice = computeProductPrice(
       item.product.weight,
       item.product.wage,
@@ -54,22 +61,30 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
     };
   });
 
-  const order = await prisma.order.create({
-    data: {
-      code,
-      userId: user.id,
-      status: "PENDING",
-      totalGrams,
-      totalWage,
-      goldPrice,
-      discountPercent,
-      totalPrice,
-      note,
-      items: { create: orderItems },
-    },
-  });
+  const order = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(orders)
+      .values({
+        code,
+        userId: user.id,
+        status: "PENDING",
+        totalGrams,
+        totalWage,
+        goldPrice,
+        discountPercent,
+        totalPrice,
+        note,
+      })
+      .returning({ id: orders.id, code: orders.code });
 
-  await prisma.cartItem.deleteMany({ where: { userId: user.id } });
+    await tx
+      .insert(orderItems)
+      .values(lines.map((line) => ({ ...line, orderId: created!.id })));
+
+    await tx.delete(cartItems).where(eq(cartItems.userId, user.id));
+
+    return created!;
+  });
 
   revalidatePath("/cart");
   revalidatePath("/profile");

@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import { prisma } from "@/lib/prisma";
-import { getCategories } from "@/lib/products";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { products } from "@/lib/db/schema";
+import { getCategories, productColumns } from "@/lib/products";
 import { AdminProductForm } from "@/components/admin-product-form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -10,15 +13,25 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const product = await prisma.product.findUnique({ where: { id } });
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, id),
+    columns: { name: true },
+  });
   return { title: product ? `ویرایش ${product.name}` : "ویرایش محصول" };
 }
 
 export default async function EditProductPage({ params }: Props) {
   const { id } = await params;
-  const product = await prisma.product.findUnique({
-    where: { id },
-    include: { category: true, images: { select: { id: true, mimeType: true }, orderBy: { createdAt: "asc" } } },
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, id),
+    columns: productColumns,
+    with: {
+      category: true,
+      images: {
+        columns: { id: true, mimeType: true },
+        orderBy: (image, { asc }) => asc(image.createdAt),
+      },
+    },
   });
 
   if (!product) notFound();

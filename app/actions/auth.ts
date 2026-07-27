@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
 import {
   createSession,
   getCurrentUser,
@@ -31,17 +34,19 @@ export async function registerAction(
     return { error: parsed.error.issues[0]?.message ?? "اطلاعات نامعتبر است" };
   }
 
-  const existing = await prisma.user.findUnique({
-    where: { username: parsed.data.username },
+  const existing = await db.query.users.findFirst({
+    where: eq(users.username, parsed.data.username),
+    columns: { id: true },
   });
   if (existing) return { error: "این نام کاربری قبلاً ثبت شده است" };
 
   const passwordHash = await hashPassword(parsed.data.password);
-  const user = await prisma.user.create({
-    data: { username: parsed.data.username, passwordHash, role: "CUSTOMER" },
-  });
+  const [user] = await db
+    .insert(users)
+    .values({ username: parsed.data.username, passwordHash, role: "CUSTOMER" })
+    .returning({ id: users.id });
 
-  await createSession(user.id);
+  await createSession(user!.id);
   revalidatePath("/", "layout");
   redirect("/onboarding");
 }
@@ -64,17 +69,17 @@ export async function onboardingAction(
     return { error: parsed.error.issues[0]?.message ?? "اطلاعات نامعتبر است" };
   }
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
+  await db
+    .update(users)
+    .set({
       firstName: parsed.data.firstName,
       lastName: parsed.data.lastName,
       birthDate: parsed.data.birthDate,
       gender: parsed.data.gender,
       phone: parsed.data.phone,
       onboarded: true,
-    },
-  });
+    })
+    .where(eq(users.id, user.id));
 
   revalidatePath("/", "layout");
   redirect("/");
@@ -102,9 +107,9 @@ export async function updateProfileAction(
     return { error: parsed.error.issues[0]?.message ?? "اطلاعات نامعتبر است" };
   }
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
+  await db
+    .update(users)
+    .set({
       firstName: parsed.data.firstName,
       lastName: parsed.data.lastName,
       birthDate: parsed.data.birthDate,
@@ -115,8 +120,8 @@ export async function updateProfileAction(
       address: parsed.data.address || null,
       postalCode: parsed.data.postalCode || null,
       onboarded: true,
-    },
-  });
+    })
+    .where(eq(users.id, user.id));
 
   revalidatePath("/", "layout");
   return { error: undefined };

@@ -8,8 +8,12 @@ import {
   UserCircle,
 } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+
+import { countRows, db } from "@/lib/db";
+import { orders as ordersTable } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { getOrderItemCounts } from "@/lib/orders";
 import { toPersianDigits, formatToman, formatDateJalali } from "@/lib/format";
 import { LEVEL_COUNTABLE_STATUSES } from "@/lib/user-levels";
 import {
@@ -72,16 +76,20 @@ export default async function ProfilePage({
   const isCustomer = user.role === "CUSTOMER";
   const page = parsePageParam(raw.page);
 
-  const [ordersTotal, spendAgg] = await Promise.all([
-    prisma.order.count({ where: { userId: user.id } }),
+  const [ordersTotal, spendRows] = await Promise.all([
+    countRows(ordersTable, eq(ordersTable.userId, user.id)),
     isCustomer
-      ? prisma.order.aggregate({
-          where: {
-            userId: user.id,
-            status: { in: [...LEVEL_COUNTABLE_STATUSES] },
-          },
-          _sum: { totalPrice: true },
-        })
+      ? db
+          .select({
+            total: sql<number>`coalesce(sum(${ordersTable.totalPrice}), 0)`,
+          })
+          .from(ordersTable)
+          .where(
+            and(
+              eq(ordersTable.userId, user.id),
+              inArray(ordersTable.status, [...LEVEL_COUNTABLE_STATUSES])
+            )
+          )
       : Promise.resolve(null),
   ]);
 
@@ -91,25 +99,30 @@ export default async function ProfilePage({
     PROFILE_ORDERS_PAGE_SIZE
   );
 
-  const orders =
+  const orderRows =
     activeTab === "orders"
-      ? await prisma.order.findMany({
-          where: { userId: user.id },
-          orderBy: { createdAt: "desc" },
-          skip: ordersPagination.skip,
-          take: ordersPagination.take,
-          select: {
+      ? await db.query.orders.findMany({
+          where: eq(ordersTable.userId, user.id),
+          orderBy: desc(ordersTable.createdAt),
+          offset: ordersPagination.skip,
+          limit: ordersPagination.take,
+          columns: {
             id: true,
             code: true,
             status: true,
             totalPrice: true,
             createdAt: true,
-            _count: { select: { items: true } },
           },
         })
       : [];
 
-  const totalSpent = spendAgg?._sum.totalPrice ?? 0;
+  const itemCounts = await getOrderItemCounts(orderRows.map((o) => o.id));
+  const orders = orderRows.map((order) => ({
+    ...order,
+    itemCount: itemCounts.get(order.id) ?? 0,
+  }));
+
+  const totalSpent = Number(spendRows?.[0]?.total ?? 0);
 
   const displayName = user.firstName
     ? `${user.firstName} ${user.lastName ?? ""}`.trim()
@@ -211,7 +224,7 @@ function OrdersPanel({
     status: string;
     totalPrice: number;
     createdAt: Date;
-    _count: { items: number };
+    itemCount: number;
   }[];
   pagination: Pagination;
   hrefForPage: (page: number) => string;
@@ -270,7 +283,7 @@ function OrdersPanel({
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <ShoppingBag className="size-3.5 text-gold/80" />
-                        {toPersianDigits(order._count.items)} قلم
+                        {toPersianDigits(order.itemCount)} قلم
                       </span>
                     </div>
                   </div>

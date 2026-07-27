@@ -2,7 +2,10 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Plus, Pencil } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { desc } from "drizzle-orm";
+
+import { countRows, db } from "@/lib/db";
+import { products as productsTable } from "@/lib/db/schema";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
 import { toPersianDigits, formatToman, formatGram } from "@/lib/format";
 import { buildPagination, buildPagedHref, parsePageParam } from "@/lib/pagination";
@@ -25,14 +28,14 @@ export default async function AdminProductsPage({
   const raw = await searchParams;
   const page = parsePageParam(raw.page);
 
-  const total = await prisma.product.count();
+  const total = await countRows(productsTable);
   const pagination = buildPagination(page, total);
   const [products, goldPrice] = await Promise.all([
-    prisma.product.findMany({
-      include: { category: true, images: { take: 1, select: { id: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: pagination.skip,
-      take: pagination.take,
+    db.query.products.findMany({
+      with: { category: true, images: { columns: { id: true }, limit: 1 } },
+      orderBy: desc(productsTable.createdAt),
+      offset: pagination.skip,
+      limit: pagination.take,
     }),
     getGoldPricePerGram(),
   ]);

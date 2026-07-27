@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Users } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { count, desc, eq, inArray, sql } from "drizzle-orm";
+
+import { countRows, db } from "@/lib/db";
+import { orders, users } from "@/lib/db/schema";
 import {
   getLevelFromSpend,
   LEVEL_COUNTABLE_STATUSES,
@@ -23,6 +26,34 @@ export const metadata: Metadata = { title: "مدیریت کاربران" };
 
 type SearchParams = Promise<{ page?: string }>;
 
+type OrderStats = { orderCount: number; totalSpent: number };
+
+async function getOrderStats(
+  userIds: string[]
+): Promise<Map<string, OrderStats>> {
+  if (userIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      userId: orders.userId,
+      orderCount: count(),
+      totalSpent: sql<number>`coalesce(sum(case when ${inArray(
+        orders.status,
+        [...LEVEL_COUNTABLE_STATUSES]
+      )} then ${orders.totalPrice} else 0 end), 0)`,
+    })
+    .from(orders)
+    .where(inArray(orders.userId, userIds))
+    .groupBy(orders.userId);
+
+  return new Map(
+    rows.map((row) => [
+      row.userId,
+      { orderCount: row.orderCount, totalSpent: Number(row.totalSpent) },
+    ])
+  );
+}
+
 export default async function AdminUsersPage({
   searchParams,
 }: {
@@ -30,16 +61,16 @@ export default async function AdminUsersPage({
 }) {
   const raw = await searchParams;
   const page = parsePageParam(raw.page);
-  const where = { role: "CUSTOMER" } as const;
+  const where = eq(users.role, "CUSTOMER");
 
-  const total = await prisma.user.count({ where });
+  const total = await countRows(users, where);
   const pagination = buildPagination(page, total);
-  const users = await prisma.user.findMany({
+  const customers = await db.query.users.findMany({
     where,
-    orderBy: { createdAt: "desc" },
-    skip: pagination.skip,
-    take: pagination.take,
-    select: {
+    orderBy: desc(users.createdAt),
+    offset: pagination.skip,
+    limit: pagination.take,
+    columns: {
       id: true,
       username: true,
       firstName: true,
@@ -54,16 +85,16 @@ export default async function AdminUsersPage({
       discountPercent: true,
       onboarded: true,
       createdAt: true,
-      orders: {
-        where: { status: { in: [...LEVEL_COUNTABLE_STATUSES] } },
-        select: { totalPrice: true },
-      },
-      _count: { select: { orders: true } },
     },
   });
 
-  const rows = users.map((user) => {
-    const totalSpent = user.orders.reduce((sum, o) => sum + o.totalPrice, 0);
+  // One grouped pass over this page's customers: total orders, and the spend
+  // that counts toward their level.
+  const orderStats = await getOrderStats(customers.map((c) => c.id));
+
+  const rows = customers.map((user) => {
+    const stats = orderStats.get(user.id);
+    const totalSpent = stats?.totalSpent ?? 0;
     const level = getLevelFromSpend(totalSpent);
     const name = user.firstName
       ? `${user.firstName} ${user.lastName ?? ""}`.trim()
@@ -86,7 +117,7 @@ export default async function AdminUsersPage({
       onboarded: user.onboarded,
       name,
       level,
-      orderCount: user._count.orders,
+      orderCount: stats?.orderCount ?? 0,
       createdAtLabel: toPersianDigits(formatDateJalali(user.createdAt)),
       totalSpentLabel: toPersianDigits(formatToman(totalSpent)),
     };

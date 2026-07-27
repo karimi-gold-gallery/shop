@@ -2,7 +2,10 @@ import Link from "next/link";
 import { Package, FolderTree, ClipboardList, Clock, CheckCircle2, TrendingUp } from "lucide-react";
 import type { Metadata } from "next";
 
-import { prisma } from "@/lib/prisma";
+import { eq, inArray, sql } from "drizzle-orm";
+
+import { countRows, db } from "@/lib/db";
+import { categories, orders, products } from "@/lib/db/schema";
 import { getGoldPricePerGram } from "@/lib/gold-price";
 import { toPersianDigits, formatToman } from "@/lib/format";
 import { GoldPriceForm } from "@/components/gold-price-form";
@@ -12,17 +15,20 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = { title: "داشبورد مدیریت" };
 
 export default async function AdminDashboard() {
-  const [productCount, categoryCount, orderCount, pendingOrders, paidOrders, finishedRevenue, goldPrice] = await Promise.all([
-    prisma.product.count(),
-    prisma.category.count(),
-    prisma.order.count(),
-    prisma.order.count({ where: { status: "PENDING" } }),
-    prisma.order.count({ where: { status: "PAID" } }),
-    prisma.order.aggregate({ where: { status: { in: ["PAID", "FINISHED"] } }, _sum: { totalPrice: true } }),
+  const [productCount, categoryCount, orderCount, pendingOrders, paidOrders, revenueRows, goldPrice] = await Promise.all([
+    countRows(products),
+    countRows(categories),
+    countRows(orders),
+    countRows(orders, eq(orders.status, "PENDING")),
+    countRows(orders, eq(orders.status, "PAID")),
+    db
+      .select({ total: sql<number>`coalesce(sum(${orders.totalPrice}), 0)` })
+      .from(orders)
+      .where(inArray(orders.status, ["PAID", "FINISHED"])),
     getGoldPricePerGram(),
   ]);
 
-  const revenue = finishedRevenue._sum.totalPrice ?? 0;
+  const revenue = Number(revenueRows[0]?.total ?? 0);
 
   const stats = [
     { label: "محصولات", value: toPersianDigits(productCount), icon: Package, href: "/admin/products" },

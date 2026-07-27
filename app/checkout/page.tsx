@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ArrowLeft, PhoneCall } from "lucide-react";
 import type { Metadata } from "next";
 
-import { prisma } from "@/lib/prisma";
+import { desc, eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { cartItems } from "@/lib/db/schema";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
 import { getUserDiscountPercent } from "@/lib/pricing";
@@ -23,10 +26,10 @@ export const metadata: Metadata = { title: "تسویه سفارش" };
 export default async function CheckoutPage() {
   const user = await requireOnboardedUser();
 
-  const items = await prisma.cartItem.findMany({
-    where: { userId: user.id },
-    include: { product: true },
-    orderBy: { createdAt: "desc" },
+  const items = await db.query.cartItems.findMany({
+    where: eq(cartItems.userId, user.id),
+    with: { product: true },
+    orderBy: desc(cartItems.createdAt),
   });
 
   if (items.length === 0) {

@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { and, eq, sql } from "drizzle-orm";
 
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { cartItems, products } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 
 export type AddToCartResult = { status: "ok" } | { status: "login" };
@@ -11,23 +13,20 @@ export async function addToCartAction(productId: string): Promise<AddToCartResul
   const user = await getCurrentUser();
   if (!user) return { status: "login" };
 
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, productId),
+    columns: { id: true, active: true },
+  });
   if (!product || !product.active) return { status: "ok" };
 
-  const existing = await prisma.cartItem.findUnique({
-    where: { userId_productId: { userId: user.id, productId } },
-  });
-
-  if (existing) {
-    await prisma.cartItem.update({
-      where: { id: existing.id },
-      data: { quantity: existing.quantity + 1 },
+  // The (userId, productId) unique index makes this an atomic "add one".
+  await db
+    .insert(cartItems)
+    .values({ userId: user.id, productId })
+    .onConflictDoUpdate({
+      target: [cartItems.userId, cartItems.productId],
+      set: { quantity: sql`${cartItems.quantity} + 1` },
     });
-  } else {
-    await prisma.cartItem.create({
-      data: { userId: user.id, productId },
-    });
-  }
 
   revalidatePath("/cart");
   revalidatePath("/", "layout");
@@ -41,16 +40,12 @@ export async function updateCartQuantityAction(
   const user = await getCurrentUser();
   if (!user) return;
 
-  const item = await prisma.cartItem.findUnique({ where: { id: itemId } });
-  if (!item || item.userId !== user.id) return;
+  const where = and(eq(cartItems.id, itemId), eq(cartItems.userId, user.id));
 
   if (quantity <= 0) {
-    await prisma.cartItem.delete({ where: { id: itemId } });
+    await db.delete(cartItems).where(where);
   } else {
-    await prisma.cartItem.update({
-      where: { id: itemId },
-      data: { quantity },
-    });
+    await db.update(cartItems).set({ quantity }).where(where);
   }
 
   revalidatePath("/cart");
@@ -61,16 +56,16 @@ export async function removeFromCartAction(itemId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) return;
 
-  const item = await prisma.cartItem.findUnique({ where: { id: itemId } });
-  if (!item || item.userId !== user.id) return;
+  await db
+    .delete(cartItems)
+    .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, user.id)));
 
-  await prisma.cartItem.delete({ where: { id: itemId } });
   revalidatePath("/cart");
   revalidatePath("/", "layout");
 }
 
 export async function clearCartAction(userId: string): Promise<void> {
-  await prisma.cartItem.deleteMany({ where: { userId } });
+  await db.delete(cartItems).where(eq(cartItems.userId, userId));
   revalidatePath("/cart");
   revalidatePath("/", "layout");
 }
