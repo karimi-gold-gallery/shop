@@ -12,6 +12,7 @@ Customers can:
 
 - Browse 18k gold jewelry by category
 - See live prices based on the current gold price per gram plus making wage (اجرت)
+- See their **personal discount** (if an admin granted one) already applied to every price
 - Add items to a cart, place an order, and receive an order code
 - Contact the gallery by phone to complete payment and pickup/delivery
 - See their **membership level** (1–3) and how much more spending unlocks the next level
@@ -22,6 +23,7 @@ Admins can:
 
 - Manage categories and products (including images)
 - Manage customers (list, create, edit, delete) and see each user’s level
+- Grant any customer a **personal discount percentage** applied to all prices that customer sees
 - Update the gold price per gram
 - View and update order statuses
 
@@ -69,15 +71,24 @@ Products are priced dynamically from:
 1. **Weight** (grams of gold)
 2. **Current gold price per gram** (تومان) — store-wide setting
 3. **Wage / making charge** (اجرت ساخت) — per product, in تومان
+4. **Personal discount** (درصد تخفیف اختصاصی) — per customer, 0 by default
 
 ### Formula
 
 ```text
-unitPrice = weight × goldPricePerGram + wage
+basePrice = weight × goldPricePerGram + wage
+unitPrice = basePrice × (1 − discountPercent / 100)
 lineTotal = unitPrice × quantity
 ```
 
-Implemented in `lib/gold-price.ts` as `computeProductPrice(weight, wage, goldPricePerGram)`.
+Implemented in `lib/gold-price.ts`:
+
+| Function | Purpose |
+|----------|---------|
+| `computeProductPrice(weight, wage, goldPricePerGram, discountPercent = 0)` | Final price the viewer pays |
+| `computeBaseProductPrice(weight, wage, goldPricePerGram)` | Undiscounted price (crossed-out display) |
+| `applyDiscount(amount, discountPercent)` | Discount any Toman amount |
+| `normalizeDiscountPercent(percent)` | Clamp to `0…100`, non-finite → 0 |
 
 ### Gold price
 
@@ -87,14 +98,37 @@ Implemented in `lib/gold-price.ts` as `computeProductPrice(weight, wage, goldPri
 - Shown in the site header strip
 - Code comments note a future API/cron for automatic updates
 
+### Per-customer discounts
+
+An admin can give any customer a discount percentage; every price that customer sees is reduced by it.
+
+| Detail | Behavior |
+|--------|----------|
+| Storage | `User.discountPercent` — Float, `0…100`, default `0` |
+| Who gets it | `CUSTOMER` role only — guests and admins always see list prices |
+| Scope | Applies to the **whole** price (gold value + wage), not just the wage |
+| Where resolved | `lib/pricing.ts` → `getUserDiscountPercent(user)` / `getViewerPricing()` |
+| Admin UI | `/admin/users` — field in the create & edit dialogs, plus a “تخفیف” column |
+| Validation | `discountPercentField` in `lib/schemas.ts`; blank → `0`, accepts decimals and Persian digits |
+| Sorting | Uniform multiplier, so price sort order is unaffected — no change to ranking logic |
+
+Customer-facing display when a discount is active:
+
+- Product cards: تخفیف badge + crossed-out base price
+- Product detail: crossed-out base price and the Toman amount saved
+- Cart / checkout: “جمع بدون تخفیف” line plus a discount line
+- `PersonalDiscountNotice` banner on `/products`, `/cart`, and `/profile`
+
 ### Order snapshots
 
 When an order is placed, the system **freezes** prices into the order:
 
-- Order-level: `goldPrice`, `totalGrams`, `totalWage`, `totalPrice`
+- Order-level: `goldPrice`, `discountPercent`, `totalGrams`, `totalWage`, `totalPrice`
 - Line-level: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`
 
-Later gold-price changes do **not** change historical orders.
+`totalPrice` and `unitPrice` are the **discounted** amounts — what the customer actually owes. The undiscounted total is recoverable as `totalGrams × goldPrice + totalWage`, which is how both order pages render the discount breakdown.
+
+Later gold-price changes — and later changes to the customer’s discount — do **not** change historical orders.
 
 ### Order codes
 
@@ -138,10 +172,10 @@ UI: `components/user-level-card.tsx` (profile), admin users table
 | 2 | `50_000_000` | |
 | 3 | `200_000_000` | Max level |
 
-- **Spend source:** sum of `Order.totalPrice` where status is `PAID` or `FINISHED` (`LEVEL_COUNTABLE_STATUSES`)
+- **Spend source:** sum of `Order.totalPrice` where status is `PAID` or `FINISHED` (`LEVEL_COUNTABLE_STATUSES`) — this is the **discounted** amount, so a personal discount slows level progress slightly
 - **Profile:** customers see current level, progress bar, remaining amount to next level, and all thresholds
 - **Admin:** each customer row shows level + total spend
-- Levels currently unlock **no benefits** — reserved for future perks
+- Levels currently unlock **no benefits** — reserved for future perks. Personal discounts are set manually per user and are **not** tied to level
 
 Thresholds live in `LEVEL_THRESHOLDS` and are easy to change later.
 
@@ -240,6 +274,7 @@ Setting (key/value)
 | `role` | `"CUSTOMER"` \| `"ADMIN"` |
 | `firstName`, `lastName`, `birthDate`, `gender`, `phone` | Profile |
 | `nationalCode`, `address`, `city`, `postalCode` | Optional address/ID |
+| `discountPercent` | Float `0…100`, default `0` — personal discount on every price this customer sees |
 | `onboarded` | Default `false` |
 | *(no `level` column)* | Level is derived from paid/finished order totals |
 
@@ -278,13 +313,14 @@ Unique `(userId, productId)`, `quantity` default 1. Cascade with user/product.
 |-------|--------|
 | `code` | Unique public code (`KG-…`) |
 | `status` | Default `"PENDING"` |
-| `totalGrams`, `totalWage`, `goldPrice`, `totalPrice` | Snapshots |
+| `totalGrams`, `totalWage`, `goldPrice`, `totalPrice` | Snapshots; `totalPrice` is post-discount |
+| `discountPercent` | Float, default `0` — customer discount in effect at checkout |
 | `note` | Optional customer note |
 | Indexes | `userId`, `status` |
 
 #### OrderItem
 
-Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`. Product relation is Restrict (product cannot be deleted if referenced by order lines — delete product carefully / via admin flow).
+Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`. `unitPrice` is post-discount; the base price stays derivable as `weight × goldPrice + wage`. Product relation is Restrict (product cannot be deleted if referenced by order lines — delete product carefully / via admin flow).
 
 #### Setting
 
@@ -322,7 +358,7 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 | `/admin/categories` | Category CRUD |
 | `/admin/orders` | Orders list (paginated) |
 | `/admin/orders/[id]` | Order detail + status actions |
-| `/admin/users` | Customer list + create / edit / delete (paginated); shows level & spend |
+| `/admin/users` | Customer list + create / edit / delete (paginated); shows level, spend & personal discount |
 
 ### API
 
@@ -367,7 +403,7 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 
 | Action | Does |
 |--------|------|
-| `placeOrderAction` | Snapshot prices, create `PENDING` order, clear cart, redirect to `/orders/{code}` |
+| `placeOrderAction` | Snapshot prices **with the customer’s discount applied**, store `discountPercent` on the order, create `PENDING` order, clear cart, redirect to `/orders/{code}` |
 
 ### Admin — `app/actions/admin.ts` (all call `requireAdmin`)
 
@@ -379,8 +415,8 @@ Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, o
 | `updateOrderStatusAction` | Validate via `orderStatusSchema` |
 | `deleteOrderAction` | Delete order |
 | `updateGoldPriceAction` | Upsert gold price setting |
-| `createUserAction` | Create `CUSTOMER` (admin form; `onboarded: true`) |
-| `updateUserAction` | Update customer profile; optional password change |
+| `createUserAction` | Create `CUSTOMER` (admin form; `onboarded: true`), including `discountPercent` |
+| `updateUserAction` | Update customer profile + `discountPercent`; optional password change. Also `revalidatePath("/", "layout")` because prices are personalised |
 | `deleteUserAction` | Delete customer if no orders; clears sessions + cart |
 
 Product/category slugs: `lib/slug.ts` — slugify name + short random suffix.
@@ -405,7 +441,7 @@ Helpers: `lib/products.ts`, `lib/product-search.ts`
 | Value | Behavior |
 |-------|----------|
 | `newest` | By created date — true DB `skip` / `take` |
-| `price-asc` / `price-desc` | Rank by computed price (`weight × gold + wage`), then hydrate the current page |
+| `price-asc` / `price-desc` | Rank by computed price (`weight × gold + wage`), then hydrate the current page. Personal discounts are a uniform multiplier, so they never change the ordering |
 
 ### Categories (seeded)
 
@@ -469,7 +505,7 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 
 1. **UI primitives** — `components/ui/*` (shadcn-style): button, input, select, dialog, table, badge, card, etc.
    - Button/badge variants include `navy`, `gold`, `success`
-2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `user-level-card`, `pagination-controls`, `gold-price-form`, `admin-*` (including `admin-users`), `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
+2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `user-level-card`, `personal-discount-notice`, `pagination-controls`, `gold-price-form`, `admin-*` (including `admin-users`), `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
 
 ### Important UX details
 
@@ -500,10 +536,11 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 | `productSchema` | weight > 0, wage ≥ 0, category required |
 | `goldPriceSchema` | price > 0 |
 | `orderStatusSchema` | `PENDING` \| `PAID` \| `FINISHED` \| `CANCELLED` |
-| `adminCreateUserSchema` | username, password, name, phone, gender, birthDate, optional city |
+| `adminCreateUserSchema` | username, password, name, phone, gender, birthDate, optional city, `discountPercent` |
 | `adminUpdateUserSchema` | same + optional password, address/national/postal, `onboarded` |
+| `discountPercentField` | Shared: blank/missing → `0`; Persian digits and decimals accepted; must be `0…100` |
 
-Formatting helpers also live in `lib/format.ts`: `formatToman`, `formatGram`, `formatDateJalali`, etc. (locale `fa-IR`, timezone `Asia/Tehran` for dates).
+Formatting helpers also live in `lib/format.ts`: `formatToman`, `formatGram`, `formatPercent`, `formatDateJalali`, etc. (locale `fa-IR`, timezone `Asia/Tehran` for dates).
 
 ---
 
@@ -583,7 +620,8 @@ Add to cart → /cart → /checkout
         ↓
 placeOrderAction
   • compute prices with current goldPricePerGram
-  • create Order + OrderItems (PENDING)
+  • apply the customer's personal discount (if any)
+  • create Order + OrderItems (PENDING), storing discountPercent
   • generate KG-###### code
   • clear cart
         ↓
@@ -607,6 +645,7 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 | Auth actions | `app/actions/auth.ts` |
 | Login API | `app/api/auth/login/route.ts` |
 | Pricing | `lib/gold-price.ts` |
+| Viewer discount resolution | `lib/pricing.ts`, `components/personal-discount-notice.tsx` |
 | User levels | `lib/user-levels.ts`, `components/user-level-card.tsx` |
 | Pagination | `lib/pagination.ts`, `components/pagination-controls.tsx` |
 | Orders helpers / actions | `lib/orders.ts`, `app/actions/orders.ts` |
@@ -634,6 +673,9 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 7. **Persian-first UX** — RTL, Vazirmatn, Jalali dates, Persian digit display with English digit storage/validation.
 8. **Computed membership levels** — no extra column to keep in sync; spend from settled orders drives level 1–3.
 9. **Server-side pagination** — list pages use `count` + `skip`/`take` instead of loading full tables.
+10. **Discount stored on the user, applied at render** — mirrors how a bazaar shop gives regulars a standing rate, and one column drives every surface. Kept off products so it never has to be re-applied per item.
+11. **Discount applies to the full price, not just the wage** — simplest rule to explain to a customer. Switching to a wage-only discount is a one-line change in `computeProductPrice`.
+12. **Discount snapshotted onto the order** — same reasoning as the gold-price snapshot: changing a customer’s rate must not rewrite their order history.
 
 ---
 
@@ -646,11 +688,12 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 - Inventory/stock quantities
 - Multi-shop / multi-currency
 - Soft-delete or archive for products with order history constraints beyond Restrict
-- **Level benefits / privileges** — levels are visible and progress is tracked, but they do not change pricing, shipping, or access yet
+- **Level benefits / privileges** — levels are visible and progress is tracked, but they do not change pricing, shipping, or access yet. Discounts exist but are granted manually per user, not automatically by level
+- Coupon / promo codes, category- or product-scoped discounts, and time-limited sales (only the flat per-customer discount exists)
 - Deleting customers who already have orders (blocked by design)
 
 These are natural extension points if the product grows.
 
 ---
 
-*Last aligned with the codebase after user levels, pagination, and admin user CRUD. Prefer the source files listed above when behavior and this document disagree.*
+*Last aligned with the codebase after per-customer discounts, user levels, pagination, and admin user CRUD. Prefer the source files listed above when behavior and this document disagree.*
