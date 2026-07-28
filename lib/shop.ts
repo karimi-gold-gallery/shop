@@ -1,6 +1,6 @@
 const DEFAULTS = {
   phone: "021-52002092",
-  mobile: "09121111111",
+  mobile: "",
   address: "بازار بزرگ تهران، پاساژ دلگشا، طبقه ۳، واحد ۲۷",
   /** Instagram handle only (no @, no URL) */
   instagram: "karimigold_gallery",

@@ -5,6 +5,7 @@ import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
+import { isMaintenanceMode } from "@/lib/maintenance";
 
 const vazirmatn = Vazirmatn({
   subsets: ["arabic", "latin"],
@@ -27,6 +28,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const maintenance = isMaintenanceMode();
+
   return (
     <html
       lang="fa"
@@ -34,10 +37,14 @@ export default function RootLayout({
       className={`${vazirmatn.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <SiteHeader />
+        {!maintenance && <SiteHeader />}
         <main className="flex-1 flex flex-col">{children}</main>
-        <SiteFooter />
-        <Toaster />
+        {!maintenance && (
+          <>
+            <SiteFooter />
+            <Toaster />
+          </>
+        )}
       </body>
     </html>
   );
