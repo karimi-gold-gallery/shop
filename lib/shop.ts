@@ -5,7 +5,7 @@ const DEFAULTS = {
   /** Instagram handle only (no @, no URL) */
   instagram: "karimigold_gallery",
   slogan: "زیبایی و شکوهی که شایسته شماست",
-  experience: "با بیش از ۴۰ سال سابقه تک‌فروشی و بنکداری",
+  experience: "با افتخار، برترین و به‌روزترین طراحی‌های طلا و جواهر را در محیطی امن و مطمئن به شما همراهان گرامی معرفی می‌کنیم.",
 };
 
 export type ShopInfo = typeof DEFAULTS;
