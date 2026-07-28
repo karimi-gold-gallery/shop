@@ -6,11 +6,12 @@ import { eq } from "drizzle-orm";
 import { createSession, getPostAuthRedirectPath, verifyPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { absoluteUrl } from "@/lib/request-origin";
 import { loginSchema } from "@/lib/schemas";
 
 export async function POST(request: Request) {
   const formData = await request.formData();
-  const loginUrl = new URL("/login", request.url);
+  const loginUrl = absoluteUrl(request, "/login");
 
   const parsed = loginSchema.safeParse({
     username: formData.get("username"),
@@ -40,5 +41,5 @@ export async function POST(request: Request) {
   await createSession(user.id);
   revalidatePath("/", "layout");
 
-  return NextResponse.redirect(new URL(getPostAuthRedirectPath(user), request.url), 303);
+  return NextResponse.redirect(absoluteUrl(request, getPostAuthRedirectPath(user)), 303);
 }
