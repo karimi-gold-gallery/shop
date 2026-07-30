@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { countRows } from "@/lib/db";
 import { cartItems } from "@/lib/db/schema";
-import { getGoldPricePerGram } from "@/lib/gold-price";
+import { getGoldPrices } from "@/lib/gold-prices";
 import { toPersianDigits, formatNumber } from "@/lib/format";
 import { SearchBox } from "@/components/search-box";
 import { UserMenu } from "@/components/user-menu";
@@ -16,14 +16,18 @@ import { Button } from "@/components/ui/button";
 import { getCategories } from "@/lib/products";
 
 export async function GoldPriceStrip() {
-  const price = await getGoldPricePerGram();
+  const prices = await getGoldPrices();
   return (
     <div className="navy-gradient text-navy-foreground text-xs sm:text-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 px-4 py-1.5">
         <Diamond className="size-3.5 text-gold" />
-        <span>قیمت روز طلا (هر گرم ۱۸ عیار):</span>
+        <span>قیمت روز هر گرم طلا:</span>
         <span className="font-bold text-gold">
-          {toPersianDigits(formatNumber(price))} تومان
+          ۱۸ عیار {toPersianDigits(formatNumber(prices[18]))} تومان
+        </span>
+        <span className="text-navy-foreground/40">|</span>
+        <span className="font-bold text-gold">
+          ۲۴ عیار {toPersianDigits(formatNumber(prices[24]))} تومان
         </span>
         <span className="hidden sm:inline text-navy-foreground/60">— قیمت‌ها به‌صورت لحظه‌ای به‌روز می‌شوند</span>
       </div>

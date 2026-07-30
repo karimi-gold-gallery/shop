@@ -50,7 +50,11 @@ export default async function AdminOrderDetailPage({ params }: Props) {
   if (!order) notFound();
   const status = STATUS_LABEL[order.status] ?? STATUS_LABEL.PENDING;
   const customer = order.user;
-  const basePrice = order.totalGrams * order.goldPrice + order.totalWage;
+  const basePrice = order.items.reduce(
+    (sum, item) =>
+      sum + (item.weight * item.goldPrice + item.wage) * item.quantity,
+    0
+  );
 
   return (
     <div className="space-y-5">
@@ -87,7 +91,10 @@ export default async function AdminOrderDetailPage({ params }: Props) {
                     <div>
                       <p className="font-medium text-navy">{item.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {toPersianDigits(item.quantity)} عدد • وزن {toPersianDigits(formatGram(item.weight))}
+                        {toPersianDigits(item.quantity)} عدد • طلای{" "}
+                        {toPersianDigits(item.karat)} عیار • وزن{" "}
+                        {toPersianDigits(formatGram(item.weight))} • هر گرم{" "}
+                        {toPersianDigits(formatToman(item.goldPrice))}
                       </p>
                     </div>
                   </div>
@@ -98,7 +105,6 @@ export default async function AdminOrderDetailPage({ params }: Props) {
             <div className="border-t border-border pt-3 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">مجموع وزن طلا</span><span className="font-medium">{toPersianDigits(formatGram(order.totalGrams))}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">مجموع اجرت</span><span className="font-medium">{toPersianDigits(formatToman(order.totalWage))}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">قیمت هر گرم طلا (زمان ثبت)</span><span className="font-medium">{toPersianDigits(formatToman(order.goldPrice))}</span></div>
               {order.discountPercent > 0 && (
                 <>
                   <div className="flex justify-between"><span className="text-muted-foreground">جمع بدون تخفیف</span><span className="font-medium">{toPersianDigits(formatToman(basePrice))}</span></div>

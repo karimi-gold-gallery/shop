@@ -7,8 +7,8 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cartItems } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
-import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
-import { getUserDiscountPercent } from "@/lib/pricing";
+import { getGoldPrices, goldPriceForKarat } from "@/lib/gold-prices";
+import { computeProductPrice, getUserDiscountPercent } from "@/lib/pricing";
 import {
   formatGram,
   formatPercent,
@@ -46,7 +46,7 @@ export default async function CartPage() {
     orderBy: desc(cartItems.createdAt),
   });
 
-  const goldPrice = await getGoldPricePerGram();
+  const goldPrices = await getGoldPrices();
 
   if (items.length === 0) {
     return (
@@ -67,6 +67,7 @@ export default async function CartPage() {
   let basePrice = 0;
 
   const rows = items.map((item) => {
+    const goldPrice = goldPriceForKarat(goldPrices, item.product.karat);
     const unitPrice = computeProductPrice(
       item.product.weight,
       item.product.wage,
@@ -78,7 +79,7 @@ export default async function CartPage() {
     totalWage += item.product.wage * item.quantity;
     totalPrice += lineTotal;
     basePrice += (item.product.weight * goldPrice + item.product.wage) * item.quantity;
-    return { item, unitPrice, lineTotal };
+    return { item, unitPrice, lineTotal, goldPrice };
   });
 
   const discountAmount = basePrice - totalPrice;
@@ -91,7 +92,7 @@ export default async function CartPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-3">
-          {rows.map(({ item, unitPrice, lineTotal }) => {
+          {rows.map(({ item, unitPrice, lineTotal, goldPrice }) => {
             const image = item.product.images[0];
             return (
               <Card key={item.id} className="flex gap-4 p-4">
@@ -106,7 +107,9 @@ export default async function CartPage() {
                     {item.product.name}
                   </Link>
                   <p className="text-xs text-muted-foreground">
-                    وزن: {toPersianDigits(formatGram(item.product.weight))} • قیمت واحد: {toPersianDigits(formatToman(unitPrice))}
+                    طلای {toPersianDigits(item.product.karat)} عیار • وزن: {toPersianDigits(formatGram(item.product.weight))}
+                    {" "}• هر گرم: {toPersianDigits(formatToman(goldPrice))}
+                    {" "}• قیمت واحد: {toPersianDigits(formatToman(unitPrice))}
                   </p>
                   <div className="mt-auto flex items-center justify-between pt-2">
                     <CartItemRow itemId={item.id} quantity={item.quantity} name={item.product.name} />
@@ -123,7 +126,8 @@ export default async function CartPage() {
           <div className="space-y-2 text-sm">
             <Row label="مجموع وزن طلا" value={`${toPersianDigits(formatGram(totalGrams))}`} />
             <Row label="مجموع اجرت" value={toPersianDigits(formatToman(totalWage))} />
-            <Row label="قیمت هر گرم طلا" value={toPersianDigits(formatToman(goldPrice))} />
+            <Row label="هر گرم طلای ۱۸ عیار" value={toPersianDigits(formatToman(goldPrices[18]))} />
+            <Row label="هر گرم طلای ۲۴ عیار" value={toPersianDigits(formatToman(goldPrices[24]))} />
             {discountPercent > 0 && (
               <>
                 <Row label="جمع بدون تخفیف" value={toPersianDigits(formatToman(basePrice))} />

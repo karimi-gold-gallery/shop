@@ -11,6 +11,7 @@ import {
   type ProductSort,
 } from "@/lib/product-search";
 import { formatNumber, toPersianDigits } from "@/lib/format";
+import type { GoldPriceMap } from "@/lib/gold-prices";
 import { cn } from "@/lib/utils";
 import { SearchBox } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ type Category = {
 
 type Props = {
   categories: Category[];
-  goldPrice: number;
+  goldPrices: GoldPriceMap;
   filters: ProductSearchFilters;
 };
 
@@ -40,7 +41,7 @@ const sortLabels: Record<ProductSort, string> = {
   "price-desc": "گران‌ترین",
 };
 
-export function ProductFilters({ categories, goldPrice, filters }: Props) {
+export function ProductFilters({ categories, goldPrices, filters }: Props) {
   const router = useRouter();
 
   function navigate(next: ProductSearchFilters) {
@@ -144,7 +145,10 @@ export function ProductFilters({ categories, goldPrice, filters }: Props) {
       <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm">
         <p className="text-muted-foreground">قیمت روز طلا (هر گرم):</p>
         <p className="font-bold text-navy mt-1">
-          {toPersianDigits(formatNumber(goldPrice))} تومان
+          ۱۸ عیار: {toPersianDigits(formatNumber(goldPrices[18]))} تومان
+        </p>
+        <p className="font-bold text-navy mt-1">
+          ۲۴ عیار: {toPersianDigits(formatNumber(goldPrices[24]))} تومان
         </p>
       </div>
 
@@ -163,7 +167,7 @@ export function ProductFilters({ categories, goldPrice, filters }: Props) {
 
 export function ProductFiltersMobileTrigger({
   categories,
-  goldPrice,
+  goldPrices,
 }: Omit<Props, "filters">) {
   const searchParams = useSearchParams();
   const filters = parseProductSearchParams({
@@ -188,7 +192,7 @@ export function ProductFiltersMobileTrigger({
       <div className="border-t border-border p-4">
         <ProductFilters
           categories={categories}
-          goldPrice={goldPrice}
+          goldPrices={goldPrices}
           filters={filters}
         />
       </div>

@@ -2,6 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   customType,
   doublePrecision,
   foreignKey,
@@ -116,6 +117,7 @@ export const products = pgTable(
     slug: text("slug").notNull(),
     description: text("description"),
     weight: doublePrecision("weight").notNull(),
+    karat: integer("karat").default(18).notNull(),
     wage: doublePrecision("wage").default(0).notNull(),
     active: boolean("active").default(true).notNull(),
     categoryId: text("categoryId").notNull(),
@@ -124,6 +126,7 @@ export const products = pgTable(
   },
   (table) => [
     uniqueIndex("Product_slug_key").on(table.slug),
+    check("Product_karat_check", sql`${table.karat} in (18, 24)`),
     foreignKey({
       columns: [table.categoryId],
       foreignColumns: [categories.id],
@@ -222,6 +225,7 @@ export const orderItems = pgTable(
     productId: text("productId").notNull(),
     name: text("name").notNull(),
     weight: doublePrecision("weight").notNull(),
+    karat: integer("karat").default(18).notNull(),
     wage: doublePrecision("wage").notNull(),
     goldPrice: doublePrecision("goldPrice").notNull(),
     unitPrice: doublePrecision("unitPrice").notNull(),
@@ -231,6 +235,7 @@ export const orderItems = pgTable(
   },
   (table) => [
     index("OrderItem_orderId_idx").on(table.orderId),
+    check("OrderItem_karat_check", sql`${table.karat} in (18, 24)`),
     foreignKey({
       columns: [table.orderId],
       foreignColumns: [orders.id],
@@ -256,6 +261,23 @@ export const settings = pgTable(
     value: text("value").notNull(),
   },
   (table) => [uniqueIndex("Setting_key_key").on(table.key)]
+);
+
+export const goldPrices = pgTable(
+  "GoldPrice",
+  {
+    karat: integer("karat").primaryKey().notNull(),
+    pricePerGram: doublePrecision("pricePerGram").notNull(),
+    sourcePriceRial: doublePrecision("sourcePriceRial").notNull(),
+    sourceTime: text("sourceTime").notNull(),
+    syncedAt: timestamp("syncedAt", { precision: 3, mode: "date" })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  },
+  (table) => [
+    check("GoldPrice_karat_check", sql`${table.karat} in (18, 24)`),
+    check("GoldPrice_price_check", sql`${table.pricePerGram} > 0`),
+  ]
 );
 
 /* ------------------------------- relations -------------------------------- */
@@ -327,3 +349,4 @@ export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type NewOrderItem = typeof orderItems.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
+export type GoldPrice = typeof goldPrices.$inferSelect;

@@ -72,16 +72,18 @@ export const productSchema = z.object({
   name: z.string().trim().min(2, "نام محصول الزامی است"),
   description: z.string().trim().optional().or(z.literal("")),
   weight: englishNumber.pipe(z.number().positive("وزن باید بیشتر از صفر باشد")),
+  karat: z.preprocess(
+    (value) => Number(withEnglishDigits(value)),
+    z.union([z.literal(18), z.literal(24)], {
+      message: "عیار طلا را انتخاب کنید",
+    })
+  ),
   wage: englishNumber.pipe(z.number().min(0, "اجرت نمی‌تواند منفی باشد")),
   categoryId: z.string().min(1, "دسته‌بندی را انتخاب کنید"),
   active: z.coerce.boolean().optional().default(true),
 });
 
 export const orderStatusSchema = z.enum(["PENDING", "PAID", "FINISHED", "CANCELLED"]);
-
-export const goldPriceSchema = z.object({
-  price: englishNumber.pipe(z.number().positive("قیمت طلا باید بیشتر از صفر باشد")),
-});
 
 /** Personal customer discount, 0–100 %. Empty input means "no discount". */
 const discountPercentField = z.preprocess(
@@ -142,6 +144,5 @@ export type OnboardingInput = z.infer<typeof onboardingSchema>;
 export type ProfileInput = z.infer<typeof profileSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type ProductInput = z.infer<typeof productSchema>;
-export type GoldPriceInput = z.infer<typeof goldPriceSchema>;
 export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
 export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;

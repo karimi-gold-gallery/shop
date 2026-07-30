@@ -6,7 +6,8 @@ import { desc } from "drizzle-orm";
 
 import { countRows, db } from "@/lib/db";
 import { products as productsTable } from "@/lib/db/schema";
-import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
+import { getGoldPrices, goldPriceForKarat } from "@/lib/gold-prices";
+import { computeProductPrice } from "@/lib/pricing";
 import { toPersianDigits, formatToman, formatGram } from "@/lib/format";
 import { buildPagination, buildPagedHref, parsePageParam } from "@/lib/pagination";
 import { DeleteProductButton } from "@/components/delete-product-button";
@@ -30,14 +31,14 @@ export default async function AdminProductsPage({
 
   const total = await countRows(productsTable);
   const pagination = buildPagination(page, total);
-  const [products, goldPrice] = await Promise.all([
+  const [products, goldPrices] = await Promise.all([
     db.query.products.findMany({
       with: { category: true, images: { columns: { id: true }, limit: 1 } },
       orderBy: desc(productsTable.createdAt),
       offset: pagination.skip,
       limit: pagination.take,
     }),
-    getGoldPricePerGram(),
+    getGoldPrices(),
   ]);
 
   return (
@@ -78,7 +79,11 @@ export default async function AdminProductsPage({
               </TableRow>
             )}
             {products.map((p) => {
-              const price = computeProductPrice(p.weight, p.wage, goldPrice);
+              const price = computeProductPrice(
+                p.weight,
+                p.wage,
+                goldPriceForKarat(goldPrices, p.karat)
+              );
               const img = p.images[0];
               return (
                 <TableRow key={p.id}>
@@ -94,7 +99,12 @@ export default async function AdminProductsPage({
                     </div>
                   </TableCell>
                   <TableCell><Badge variant="secondary">{p.category.name}</Badge></TableCell>
-                  <TableCell>{toPersianDigits(formatGram(p.weight))}</TableCell>
+                  <TableCell>
+                    {toPersianDigits(formatGram(p.weight))}
+                    <span className="block text-xs text-muted-foreground">
+                      {toPersianDigits(p.karat)} عیار
+                    </span>
+                  </TableCell>
                   <TableCell className="font-semibold text-navy">{toPersianDigits(formatToman(price))}</TableCell>
                   <TableCell>
                     {p.active ? <Badge variant="success">فعال</Badge> : <Badge variant="outline">غیرفعال</Badge>}

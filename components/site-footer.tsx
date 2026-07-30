@@ -26,7 +26,7 @@ export function SiteFooter() {
             </div>
           </div>
           <p className="text-sm text-navy-foreground/70 leading-6">
-            {experience}؛ ارائه‌دهنده انواع طلای ۱۸ عیار و جواهرات اصیل با قیمت روز
+            {experience}؛ ارائه‌دهنده انواع طلای ۱۸ و ۲۴ عیار و جواهرات اصیل با قیمت روز
             طلا و گارانتی اصالت.
           </p>
         </div>

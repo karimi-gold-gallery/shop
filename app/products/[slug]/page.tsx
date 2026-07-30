@@ -4,8 +4,12 @@ import type { Metadata } from "next";
 import { ChevronLeft, ShoppingBag, Weight, Tag, Layers } from "lucide-react";
 
 import { getProductBySlug, getProducts, getCategories } from "@/lib/products";
-import { computeBaseProductPrice, computeProductPrice } from "@/lib/gold-price";
-import { getViewerPricing } from "@/lib/pricing";
+import { goldPriceForKarat } from "@/lib/gold-prices";
+import {
+  computeBaseProductPrice,
+  computeProductPrice,
+  getViewerPricing,
+} from "@/lib/pricing";
 import {
   formatGram,
   formatPercent,
@@ -38,7 +42,7 @@ function safeDecodeSlug(slug: string): string {
 export default async function ProductDetailPage({ params }: Props) {
   const { slug: rawSlug } = await params;
   const slug = safeDecodeSlug(rawSlug);
-  const [product, { goldPrice, discountPercent }, categories] = await Promise.all([
+  const [product, { goldPrices, discountPercent }, categories] = await Promise.all([
     getProductBySlug(slug),
     getViewerPricing(),
     getCategories(),
@@ -46,6 +50,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
   if (!product || !product.active) notFound();
 
+  const goldPrice = goldPriceForKarat(goldPrices, product.karat);
   const basePrice = computeBaseProductPrice(product.weight, product.wage, goldPrice);
   const price = computeProductPrice(
     product.weight,
@@ -102,7 +107,9 @@ export default async function ProductDetailPage({ params }: Props) {
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-2">
             <Badge variant="gold">{product.category.name}</Badge>
-            <Badge variant="secondary">طلای ۱۸ عیار</Badge>
+            <Badge variant="secondary">
+              طلای {toPersianDigits(product.karat)} عیار
+            </Badge>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-bold text-navy">{product.name}</h1>
@@ -159,7 +166,7 @@ export default async function ProductDetailPage({ params }: Props) {
               <ProductCard
                 key={p.id}
                 product={p}
-                goldPrice={goldPrice}
+                goldPrices={goldPrices}
                 discountPercent={discountPercent}
               />
             ))}

@@ -6,16 +6,15 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import { countRows, db } from "@/lib/db";
 import { categories, orders, products } from "@/lib/db/schema";
-import { getGoldPricePerGram } from "@/lib/gold-price";
+import { getGoldPriceRows } from "@/lib/gold-prices";
 import { toPersianDigits, formatToman } from "@/lib/format";
-import { GoldPriceForm } from "@/components/gold-price-form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "داشبورد مدیریت" };
 
 export default async function AdminDashboard() {
-  const [productCount, categoryCount, orderCount, pendingOrders, paidOrders, revenueRows, goldPrice] = await Promise.all([
+  const [productCount, categoryCount, orderCount, pendingOrders, paidOrders, revenueRows, goldPriceRows] = await Promise.all([
     countRows(products),
     countRows(categories),
     countRows(orders),
@@ -25,7 +24,7 @@ export default async function AdminDashboard() {
       .select({ total: sql<number>`coalesce(sum(${orders.totalPrice}), 0)` })
       .from(orders)
       .where(inArray(orders.status, ["PAID", "FINISHED"])),
-    getGoldPricePerGram(),
+    getGoldPriceRows(),
   ]);
 
   const revenue = Number(revenueRows[0]?.total ?? 0);
@@ -70,11 +69,27 @@ export default async function AdminDashboard() {
               قیمت روز طلا
             </CardTitle>
             <CardDescription>
-              این قیمت پایه محاسبه قیمت محصولات است. در آینده توسط API و cron job به‌روز می‌شود.
+              قیمت‌ها هر ۳۰ ثانیه از TGJU دریافت و به تومان ذخیره می‌شوند.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <GoldPriceForm currentPrice={goldPrice} />
+            <div className="space-y-3">
+              {goldPriceRows.map((row) => (
+                <div key={row.karat} className="rounded-lg bg-secondary/50 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      طلای {toPersianDigits(row.karat)} عیار
+                    </span>
+                    <span className="font-bold text-navy">
+                      {toPersianDigits(formatToman(row.pricePerGram))}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    زمان منبع: {toPersianDigits(row.sourceTime)}
+                  </p>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

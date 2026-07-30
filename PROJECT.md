@@ -10,7 +10,7 @@ Complete technical and business overview of **karimi-gold-gallery**. Reading thi
 
 Customers can:
 
-- Browse 18k gold jewelry by category
+- Browse 18k and 24k gold jewelry by category
 - See live prices based on the current gold price per gram plus making wage (اجرت)
 - See their **personal discount** (if an admin granted one) already applied to every price
 - Add items to a cart, place an order, and receive an order code
@@ -24,7 +24,7 @@ Admins can:
 - Manage categories and products (including images)
 - Manage customers (list, create, edit, delete) and see each user’s level
 - Grant any customer a **personal discount percentage** applied to all prices that customer sees
-- Update the gold price per gram
+- Monitor automatically synchronized 18k and 24k gold prices
 - View and update order statuses
 
 ---
@@ -56,6 +56,12 @@ Admins can:
 | `npm run db:studio` | Open Drizzle Studio |
 | `npm run seed` | Seed admin, categories, sample products, gold price |
 | `npm run seed:users` | Seed 30 sample customer accounts |
+| `npm run worker:gold-prices` | Optional local 30-second TGJU sync worker |
+
+Production synchronization is configured in `liara.json`: one cron invocation
+runs every minute and a second invocation waits 30 seconds. Both call the
+protected sync endpoint using `CRON_SECRET`. Do not run the separate worker in
+Liara at the same time, or each interval will be executed twice.
 
 ### Notable config
 
@@ -72,7 +78,7 @@ Admins can:
 Products are priced dynamically from:
 
 1. **Weight** (grams of gold)
-2. **Current gold price per gram** (تومان) — store-wide setting
+2. **Current gold price per gram** (تومان) — selected from the product's 18k/24k karat
 3. **Wage / making charge** (اجرت ساخت) — per product, in تومان
 4. **Personal discount** (درصد تخفیف اختصاصی) — per customer, 0 by default
 
@@ -84,7 +90,7 @@ unitPrice = basePrice × (1 − discountPercent / 100)
 lineTotal = unitPrice × quantity
 ```
 
-Implemented in `lib/gold-price.ts`:
+Implemented in `lib/pricing.ts`:
 
 | Function | Purpose |
 |----------|---------|
@@ -95,11 +101,10 @@ Implemented in `lib/gold-price.ts`:
 
 ### Gold price
 
-- Stored in `Setting` with key `goldPricePerGram`
-- Default: **4,500,000** تومان per gram (`DEFAULT_GOLD_PRICE_PER_GRAM`)
-- Editable in admin dashboard via `GoldPriceForm` → `updateGoldPriceAction`
-- Shown in the site header strip
-- Code comments note a future API/cron for automatic updates
+- Stored as two rows in `GoldPrice`, keyed by karat 18 and 24
+- TGJU Rial values are converted to Toman before storage
+- Updated by the protected sync API and the separate 30-second worker
+- Both prices and their source timestamps are shown in the admin dashboard
 
 ### Per-customer discounts
 
@@ -127,9 +132,9 @@ Customer-facing display when a discount is active:
 When an order is placed, the system **freezes** prices into the order:
 
 - Order-level: `goldPrice`, `discountPercent`, `totalGrams`, `totalWage`, `totalPrice`
-- Line-level: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`
+- Line-level: `name`, `weight`, `karat`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`
 
-`totalPrice` and `unitPrice` are the **discounted** amounts — what the customer actually owes. The undiscounted total is recoverable as `totalGrams × goldPrice + totalWage`, which is how both order pages render the discount breakdown.
+`totalPrice` and `unitPrice` are the **discounted** amounts — what the customer actually owes. Mixed-karat undiscounted totals are reconstructed from each line's snapshotted karat-specific `goldPrice`; the order-level `goldPrice` is retained as a gram-weighted compatibility value.
 
 Later gold-price changes — and later changes to the customer’s discount — do **not** change historical orders.
 
@@ -269,6 +274,7 @@ User ──< CartItem >── Product
 User ──< Order ──< OrderItem >── Product
 Category ──< Product ──< ProductImage
 Setting (key/value)
+GoldPrice (18/24 karat)
 ```
 
 ### Models
@@ -302,6 +308,7 @@ Deleting a customer with existing orders is **blocked** (`Order.userId` is `onDe
 |-------|--------|
 | `name`, `slug` | Slug unique |
 | `weight` | Float, grams |
+| `karat` | Required 18 or 24; existing products backfilled to 18 |
 | `wage` | Float, تومان, default 0 |
 | `active` | Default `true`; inactive hidden from storefront |
 | `categoryId` | Restrict on delete |
@@ -328,11 +335,16 @@ Unique `(userId, productId)`, `quantity` default 1. Cascade with user/product.
 
 #### OrderItem
 
-Line snapshot: `name`, `weight`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`. `unitPrice` is post-discount; the base price stays derivable as `weight × goldPrice + wage`. Product relation is Restrict (product cannot be deleted if referenced by order lines — delete product carefully / via admin flow).
+Line snapshot: `name`, `weight`, `karat`, `wage`, `goldPrice`, `unitPrice`, `quantity`, optional `imageId`. `unitPrice` is post-discount; the base price stays derivable as `weight × goldPrice + wage`. Product relation is Restrict (product cannot be deleted if referenced by order lines — delete product carefully / via admin flow).
 
 #### Setting
 
-`key` unique, `value` string. Used for gold price (and extensible for other config).
+`key` unique, `value` string. Reserved for extensible application configuration.
+
+#### GoldPrice
+
+One row per supported karat (18 and 24), storing Toman per gram plus the raw
+TGJU Rial price, source timestamp, and last synchronization timestamp.
 
 ---
 
@@ -513,7 +525,7 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 
 1. **UI primitives** — `components/ui/*` (shadcn-style): button, input, select, dialog, table, badge, card, etc.
    - Button/badge variants include `navy`, `gold`, `success`
-2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `user-level-card`, `personal-discount-notice`, `pagination-controls`, `gold-price-form`, `admin-*` (including `admin-users`), `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
+2. **Domain components** — e.g. `site-header`, `site-footer`, `main-nav`, `product-card`, `product-filters`, `add-to-cart-button`, `cart-item-row`, `order-code-box`, `profile-form`, `user-level-card`, `personal-discount-notice`, `pagination-controls`, `admin-*` (including `admin-users`), `jalali-date-picker`, `digits-input`, `user-menu`, `search-box`
 
 ### Important UX details
 
@@ -627,7 +639,7 @@ Login / Register → Onboarding (if needed)
 Add to cart → /cart → /checkout
         ↓
 placeOrderAction
-  • compute prices with current goldPricePerGram
+  • compute each line with the current price for its product's karat
   • apply the customer's personal discount (if any)
   • create Order + OrderItems (PENDING), storing discountPercent
   • generate KG-###### code
@@ -654,8 +666,8 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 | Auth helpers | `lib/auth.ts` |
 | Auth actions | `app/actions/auth.ts` |
 | Login API | `app/api/auth/login/route.ts` |
-| Pricing | `lib/gold-price.ts` |
-| Viewer discount resolution | `lib/pricing.ts`, `components/personal-discount-notice.tsx` |
+| Gold price storage/sync | `lib/gold-prices.ts`, `lib/tgju-gold-prices.ts` |
+| Pricing and viewer discount resolution | `lib/pricing.ts`, `components/personal-discount-notice.tsx` |
 | User levels | `lib/user-levels.ts`, `components/user-level-card.tsx` |
 | Pagination | `lib/pagination.ts`, `components/pagination-controls.tsx` |
 | Orders helpers / actions | `lib/orders.ts`, `app/actions/orders.ts` |
@@ -692,7 +704,6 @@ Admin: PENDING → PAID → FINISHED  (or CANCELLED)
 ## 17. What is intentionally not built (yet)
 
 - Online payment / gateway
-- Automatic gold-price API sync (placeholder comment exists)
 - Email/SMS notifications
 - Guest checkout (login required for cart/order)
 - Inventory/stock quantities

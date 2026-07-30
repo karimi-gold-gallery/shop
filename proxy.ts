@@ -18,6 +18,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname === "/api/gold-prices/sync") {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/api/")) {
     return NextResponse.json(
       { error: "سایت در حال بروزرسانی است. لطفاً بعداً مراجعه کنید." },

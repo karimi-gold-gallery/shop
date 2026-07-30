@@ -7,8 +7,8 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cartItems } from "@/lib/db/schema";
 import { requireOnboardedUser } from "@/lib/auth";
-import { getGoldPricePerGram, computeProductPrice } from "@/lib/gold-price";
-import { getUserDiscountPercent } from "@/lib/pricing";
+import { getGoldPrices, goldPriceForKarat } from "@/lib/gold-prices";
+import { computeProductPrice, getUserDiscountPercent } from "@/lib/pricing";
 import {
   formatGram,
   formatPercent,
@@ -41,7 +41,7 @@ export default async function CheckoutPage() {
     );
   }
 
-  const goldPrice = await getGoldPricePerGram();
+  const goldPrices = await getGoldPrices();
   const discountPercent = getUserDiscountPercent(user);
   let totalGrams = 0;
   let totalWage = 0;
@@ -60,6 +60,7 @@ export default async function CheckoutPage() {
         <h2 className="font-bold text-navy mb-3">اقلام سفارش</h2>
         <div className="divide-y divide-border">
           {items.map((item) => {
+            const goldPrice = goldPriceForKarat(goldPrices, item.product.karat);
             const unit = computeProductPrice(
               item.product.weight,
               item.product.wage,
@@ -76,7 +77,9 @@ export default async function CheckoutPage() {
                 <div>
                   <p className="font-medium text-navy">{item.product.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {toPersianDigits(item.quantity)} عدد • وزن {toPersianDigits(formatGram(item.product.weight))}
+                    {toPersianDigits(item.quantity)} عدد • طلای{" "}
+                    {toPersianDigits(item.product.karat)} عیار • وزن{" "}
+                    {toPersianDigits(formatGram(item.product.weight))}
                   </p>
                 </div>
                 <span className="font-semibold text-navy">{toPersianDigits(formatToman(line))}</span>

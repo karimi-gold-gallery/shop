@@ -17,12 +17,10 @@ import {
   type NewUser,
 } from "@/lib/db/schema";
 import { requireAdmin, hashPassword } from "@/lib/auth";
-import { setGoldPricePerGram } from "@/lib/gold-price";
 import { slugify } from "@/lib/slug";
 import {
   categorySchema,
   productSchema,
-  goldPriceSchema,
   orderStatusSchema,
   adminCreateUserSchema,
   adminUpdateUserSchema,
@@ -124,6 +122,7 @@ export async function createProductAction(
     name: formData.get("name"),
     description: formData.get("description"),
     weight: formData.get("weight"),
+    karat: formData.get("karat"),
     wage: formData.get("wage"),
     categoryId: formData.get("categoryId"),
     active: formData.get("active") === "on" ? true : false,
@@ -142,6 +141,7 @@ export async function createProductAction(
           slug,
           description: parsed.data.description || null,
           weight: parsed.data.weight,
+          karat: parsed.data.karat,
           wage: parsed.data.wage,
           categoryId: parsed.data.categoryId,
           active: parsed.data.active,
@@ -173,6 +173,7 @@ export async function updateProductAction(
     name: formData.get("name"),
     description: formData.get("description"),
     weight: formData.get("weight"),
+    karat: formData.get("karat"),
     wage: formData.get("wage"),
     categoryId: formData.get("categoryId"),
     active: formData.get("active") === "on" ? true : false,
@@ -189,6 +190,7 @@ export async function updateProductAction(
           name: parsed.data.name,
           description: parsed.data.description || null,
           weight: parsed.data.weight,
+          karat: parsed.data.karat,
           wage: parsed.data.wage,
           categoryId: parsed.data.categoryId,
           active: parsed.data.active,
@@ -250,21 +252,6 @@ export async function deleteOrderAction(orderId: string): Promise<void> {
   await requireAdmin();
   await db.delete(orders).where(eq(orders.id, orderId));
   revalidatePath("/admin/orders");
-}
-
-/* ----------------------------- Settings ----------------------------- */
-
-export async function updateGoldPriceAction(
-  _prev: ActionState,
-  formData: FormData
-): Promise<ActionState> {
-  await requireAdmin();
-  const parsed = goldPriceSchema.safeParse({ price: formData.get("price") });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
-
-  await setGoldPricePerGram(parsed.data.price);
-  revalidatePath("/", "layout");
-  return { success: "قیمت طلا به‌روز شد" };
 }
 
 /* ----------------------------- Users ----------------------------- */

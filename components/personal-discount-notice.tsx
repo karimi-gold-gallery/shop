@@ -1,6 +1,6 @@
 import { BadgePercent } from "lucide-react";
 
-import { normalizeDiscountPercent } from "@/lib/gold-price";
+import { normalizeDiscountPercent } from "@/lib/pricing";
 import { formatPercent, toPersianDigits } from "@/lib/format";
 import { cn } from "@/lib/utils";
 

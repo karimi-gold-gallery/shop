@@ -3,7 +3,7 @@ import Image from "next/image";
 import { ArrowLeft, Diamond, ShieldCheck, Truck, Sparkles, MapPin } from "lucide-react";
 
 import { getProducts, getCategories } from "@/lib/products";
-import { getGoldPricePerGram } from "@/lib/gold-price";
+import { getGoldPrices } from "@/lib/gold-prices";
 import { getUserDiscountPercent } from "@/lib/pricing";
 import { getShopInfo } from "@/lib/shop";
 import { getCurrentUser } from "@/lib/auth";
@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default async function HomePage() {
-  const [goldPrice, featured, categories, user] = await Promise.all([
-    getGoldPricePerGram(),
+  const [goldPrices, featured, categories, user] = await Promise.all([
+    getGoldPrices(),
     getProducts({ limit: 8 }),
     getCategories(),
     getCurrentUser(),
@@ -38,7 +38,7 @@ export default async function HomePage() {
             </h1>
             <p className="text-lg font-semibold text-primary">{slogan}</p>
             <p className="max-w-xl text-base leading-8 text-foreground/80 sm:text-lg">
-              مجموعه‌ای نفیس از انگشتر، گردنبند، دستبند و زنجیر طلای ۱۸ عیار با
+              مجموعه‌ای نفیس از انگشتر، گردنبند، دستبند و زنجیر طلای ۱۸ و ۲۴ عیار با
               قیمت روز طلا و اصالت تضمینی. زیبایی را با ما تجربه کنید.
             </p>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -89,8 +89,11 @@ export default async function HomePage() {
             </div>
             <div className="absolute -bottom-4 right-4 rounded-2xl border border-border bg-card p-4 shadow-xl">
               <p className="text-xs text-muted-foreground">قیمت هر گرم طلا</p>
-              <p className="text-lg font-bold text-navy">
-                {toPersianDigits(formatNumber(goldPrice))} <span className="text-xs font-normal">تومان</span>
+              <p className="text-sm font-bold text-navy">
+                ۱۸ عیار: {toPersianDigits(formatNumber(goldPrices[18]))} تومان
+              </p>
+              <p className="text-sm font-bold text-navy">
+                ۲۴ عیار: {toPersianDigits(formatNumber(goldPrices[24]))} تومان
               </p>
             </div>
           </div>
@@ -130,7 +133,7 @@ export default async function HomePage() {
             <ProductCard
               key={p.id}
               product={p}
-              goldPrice={goldPrice}
+              goldPrices={goldPrices}
               discountPercent={discountPercent}
             />
           ))}

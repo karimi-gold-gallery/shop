@@ -34,6 +34,7 @@ export function AdminProductForm({ categories, product }: Props) {
   const action = isEdit ? updateProductAction : createProductAction;
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, undefined);
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "");
+  const [karat, setKarat] = useState(String(product?.karat ?? 18));
   const [active, setActive] = useState(product?.active ?? true);
   const [_, startTransition] = useTransition();
   const router = useRouter();
@@ -50,6 +51,7 @@ export function AdminProductForm({ categories, product }: Props) {
     <form action={formAction} className="space-y-5">
       {isEdit && <input type="hidden" name="id" value={product!.id} />}
       <input type="hidden" name="categoryId" value={categoryId} />
+      <input type="hidden" name="karat" value={karat} />
 
       <div className="space-y-2">
         <Label htmlFor="name">نام محصول</Label>
@@ -61,7 +63,7 @@ export function AdminProductForm({ categories, product }: Props) {
         <Textarea id="description" name="description" defaultValue={product?.description ?? ""} rows={4} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-2">
           <Label htmlFor="weight">وزن (گرم)</Label>
           <DigitsInput id="weight" name="weight" type="text" inputMode="decimal" dir="ltr" className="text-right" defaultValue={product?.weight ?? ""} />
@@ -69,6 +71,18 @@ export function AdminProductForm({ categories, product }: Props) {
         <div className="space-y-2">
           <Label htmlFor="wage">اجرت ساخت (تومان)</Label>
           <DigitsInput id="wage" name="wage" type="text" digitsOnly inputMode="numeric" dir="ltr" className="text-right" defaultValue={product?.wage ?? 0} />
+        </div>
+        <div className="space-y-2">
+          <Label>عیار طلا</Label>
+          <Select value={karat} onValueChange={setKarat}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="18">۱۸ عیار</SelectItem>
+              <SelectItem value="24">۲۴ عیار</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label>دسته‌بندی</Label>

@@ -46,13 +46,13 @@ export default async function ProductsPage({
   const filters = parseProductSearchParams(raw);
   const page = parsePageParam(raw.page);
 
-  const [categories, { goldPrice, discountPercent }] = await Promise.all([
+  const [categories, { goldPrices, discountPercent }] = await Promise.all([
     getCategories(),
     getViewerPricing(),
   ]);
   const { products, pagination } = await getFilteredProductsPage(
     filters,
-    goldPrice,
+    goldPrices,
     page
   );
 
@@ -67,7 +67,7 @@ export default async function ProductsPage({
 
       <Suspense fallback={null}>
         <div className="mb-6">
-          <ProductFiltersMobileTrigger categories={categories} goldPrice={goldPrice} />
+          <ProductFiltersMobileTrigger categories={categories} goldPrices={goldPrices} />
         </div>
       </Suspense>
 
@@ -76,7 +76,7 @@ export default async function ProductsPage({
           <div className="hidden lg:block">
             <ProductFilters
               categories={categories}
-              goldPrice={goldPrice}
+              goldPrices={goldPrices}
               filters={filters}
             />
           </div>
@@ -106,7 +106,7 @@ export default async function ProductsPage({
                   <ProductCard
                     key={p.id}
                     product={p}
-                    goldPrice={goldPrice}
+                    goldPrices={goldPrices}
                     discountPercent={discountPercent}
                   />
                 ))}

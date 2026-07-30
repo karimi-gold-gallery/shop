@@ -51,7 +51,7 @@ export default function AboutPage() {
             <ShieldCheck className="mx-auto size-8 text-primary" />
             <h2 className="font-semibold text-navy">اصالت تضمینی</h2>
             <p className="text-sm text-muted-foreground leading-6">
-              تمامی محصولات با ضمانت اصالت و کیفیت طلای ۱۸ عیار عرضه می‌شوند.
+              تمامی محصولات با ضمانت اصالت و کیفیت طلای ۱۸ یا ۲۴ عیار عرضه می‌شوند.
             </p>
           </CardContent>
         </Card>

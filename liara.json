@@ -5,5 +5,9 @@
   },
   "build": {
     "location": "iran"
-  }
+  },
+  "cron": [
+    "* * * * * curl -fsS -X POST -H 'Authorization: Bearer replace-with-a-long-random-secret' http://localhost:3000/api/gold-prices/sync",
+    "* * * * * sleep 30; curl -fsS -X POST -H 'Authorization: Bearer replace-with-a-long-random-secret' http://localhost:3000/api/gold-prices/sync"
+  ]
 }

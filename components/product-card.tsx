@@ -1,11 +1,12 @@
 import Link from "next/link";
 
 import type { ProductCardData } from "@/lib/products";
+import { goldPriceForKarat, type GoldPriceMap } from "@/lib/gold-prices";
 import {
   computeBaseProductPrice,
   computeProductPrice,
   normalizeDiscountPercent,
-} from "@/lib/gold-price";
+} from "@/lib/pricing";
 import {
   formatGram,
   formatPercent,
@@ -16,11 +17,12 @@ import { Badge } from "@/components/ui/badge";
 
 type Props = {
   product: ProductCardData;
-  goldPrice: number;
+  goldPrices: GoldPriceMap;
   discountPercent?: number;
 };
 
-export function ProductCard({ product, goldPrice, discountPercent = 0 }: Props) {
+export function ProductCard({ product, goldPrices, discountPercent = 0 }: Props) {
+  const goldPrice = goldPriceForKarat(goldPrices, product.karat);
   const discount = normalizeDiscountPercent(discountPercent);
   const basePrice = computeBaseProductPrice(product.weight, product.wage, goldPrice);
   const price = computeProductPrice(product.weight, product.wage, goldPrice, discount);
@@ -46,7 +48,12 @@ export function ProductCard({ product, goldPrice, discountPercent = 0 }: Props) 
           </div>
         )}
         <div className="absolute top-2 right-2">
-          <Badge variant="gold" className="shadow-sm">{product.category.name}</Badge>
+          <div className="flex gap-1">
+            <Badge variant="gold" className="shadow-sm">{product.category.name}</Badge>
+            <Badge variant="secondary" className="shadow-sm">
+              {toPersianDigits(product.karat)} عیار
+            </Badge>
+          </div>
         </div>
         {discount > 0 && (
           <div className="absolute top-2 left-2">

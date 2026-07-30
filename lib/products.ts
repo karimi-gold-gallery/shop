@@ -2,7 +2,11 @@ import { and, asc, desc, eq, inArray, like, or, type SQL } from "drizzle-orm";
 
 import { countRows, db } from "@/lib/db";
 import { categories, products } from "@/lib/db/schema";
-import { computeProductPrice } from "@/lib/gold-price";
+import {
+  goldPriceForKarat,
+  type GoldPriceMap,
+} from "@/lib/gold-prices";
+import { computeProductPrice } from "@/lib/pricing";
 import type { ProductSearchFilters, ProductSort } from "@/lib/product-search";
 import {
   buildPagination,
@@ -17,6 +21,7 @@ export const productColumns = {
   slug: true,
   description: true,
   weight: true,
+  karat: true,
   wage: true,
   active: true,
   categoryId: true,
@@ -32,6 +37,7 @@ export type ProductCardData = {
   slug: string;
   description: string | null;
   weight: number;
+  karat: number;
   wage: number;
   active: boolean;
   categoryId: string;
@@ -85,7 +91,7 @@ export async function getProducts(opts: {
   categorySlug?: string;
   categorySlugs?: string[];
   sort?: ProductSort;
-  goldPricePerGram?: number;
+  goldPrices?: GoldPriceMap;
   limit?: number;
   onlyActive?: boolean;
 }): Promise<ProductCardData[]> {
@@ -94,7 +100,7 @@ export async function getProducts(opts: {
     categorySlug,
     categorySlugs = categorySlug ? [categorySlug] : [],
     sort = "newest",
-    goldPricePerGram,
+    goldPrices,
     limit,
     onlyActive = true,
   } = opts;
@@ -112,14 +118,17 @@ export async function getProducts(opts: {
     limit,
   });
 
-  const needsPriceProcessing =
-    goldPricePerGram !== undefined && sort !== "newest";
+  const needsPriceProcessing = goldPrices !== undefined && sort !== "newest";
 
   if (!needsPriceProcessing) return found;
 
   const priced = found.map((product) => ({
     product,
-    price: computeProductPrice(product.weight, product.wage, goldPricePerGram!),
+    price: computeProductPrice(
+      product.weight,
+      product.wage,
+      goldPriceForKarat(goldPrices!, product.karat)
+    ),
   }));
 
   if (sort === "price-asc") {
@@ -133,7 +142,7 @@ export async function getProducts(opts: {
 
 export async function getFilteredProductsPage(
   filters: ProductSearchFilters,
-  goldPricePerGram: number,
+  goldPrices: GoldPriceMap,
   pageInput: number,
   pageSize: number = PRODUCTS_PAGE_SIZE
 ): Promise<{ products: ProductCardData[]; pagination: Pagination }> {
@@ -168,12 +177,20 @@ export async function getFilteredProductsPage(
     // Price sort is computed from weight/wage + live gold price — page in DB by id order after ranking.
     const ranked = await db.query.products.findMany({
       where,
-      columns: { id: true, weight: true, wage: true },
+      columns: { id: true, weight: true, karat: true, wage: true },
     });
 
     ranked.sort((a, b) => {
-      const pa = computeProductPrice(a.weight, a.wage, goldPricePerGram);
-      const pb = computeProductPrice(b.weight, b.wage, goldPricePerGram);
+      const pa = computeProductPrice(
+        a.weight,
+        a.wage,
+        goldPriceForKarat(goldPrices, a.karat)
+      );
+      const pb = computeProductPrice(
+        b.weight,
+        b.wage,
+        goldPriceForKarat(goldPrices, b.karat)
+      );
       return filters.sort === "price-asc" ? pa - pb : pb - pa;
     });
 
@@ -204,13 +221,13 @@ export async function getFilteredProductsPage(
 
 export async function getFilteredProducts(
   filters: ProductSearchFilters,
-  goldPricePerGram: number
+  goldPrices: GoldPriceMap
 ): Promise<ProductCardData[]> {
   return getProducts({
     q: filters.q,
     categorySlugs: filters.categorySlugs,
     sort: filters.sort,
-    goldPricePerGram,
+    goldPrices,
   });
 }
 

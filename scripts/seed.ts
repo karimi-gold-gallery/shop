@@ -6,7 +6,7 @@ import { Pool } from "pg";
 
 import * as schema from "../lib/db/schema";
 
-const { categories, productImages, products, settings, users } = schema;
+const { categories, productImages, products, users } = schema;
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool, { schema });
@@ -69,11 +69,6 @@ async function main() {
       target: users.username,
       set: { role: "ADMIN", onboarded: true, passwordHash },
     });
-
-  await db
-    .insert(settings)
-    .values({ key: "goldPricePerGram", value: "4500000" })
-    .onConflictDoNothing({ target: settings.key });
 
   const categoriesData = [
     { name: "انگشتر", slug: "ring", description: "انگشترهای طلای زنانه و مردانه" },
@@ -211,6 +206,7 @@ async function main() {
         slug,
         description: p.description,
         weight: p.weight,
+        karat: 18,
         wage: p.wage,
         categoryId: categoryIds[p.category]!,
         active: true,
