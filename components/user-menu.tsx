@@ -14,17 +14,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-function initials(u: SafeUser) {
-  const f = u.firstName?.[0] ?? "";
-  const l = u.lastName?.[0] ?? "";
-  if (f || l) return `${f}${l}`;
-  return u.username.slice(0, 2);
-}
 
 export function UserMenu({ user }: { user: SafeUser }) {
   const router = useRouter();
+  const isAdmin = user.role === "ADMIN";
 
   async function handleLogout() {
     const res = await fetch("/api/auth/logout", { method: "POST" });
@@ -38,12 +31,8 @@ export function UserMenu({ user }: { user: SafeUser }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 rounded-full border border-border bg-card p-1 pe-3 shadow-sm hover:bg-secondary transition-colors cursor-pointer">
-          <Avatar className="size-7">
-            <AvatarFallback className="bg-primary/15 text-primary text-xs font-bold">
-              {initials(user)}
-            </AvatarFallback>
-          </Avatar>
+        <button className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 shadow-sm hover:bg-secondary transition-colors cursor-pointer">
+          <User className="size-4 text-muted-foreground" />
           <span className="hidden sm:inline text-sm font-medium max-w-[90px] truncate">
             {user.firstName || user.username}
           </span>
@@ -55,25 +44,28 @@ export function UserMenu({ user }: { user: SafeUser }) {
           <span className="text-xs font-normal text-muted-foreground">@{user.username}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/profile">
-            <User className="size-4" />
-            پروفایل من
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/profile?tab=orders">
-            <ShoppingCart className="size-4" />
-            سفارش‌های من
-          </Link>
-        </DropdownMenuItem>
-        {user.role === "ADMIN" && (
+        {isAdmin ? (
           <DropdownMenuItem asChild>
             <Link href="/admin">
               <LayoutDashboard className="size-4" />
               پنل مدیریت
             </Link>
           </DropdownMenuItem>
+        ) : (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/profile">
+                <User className="size-4" />
+                پروفایل من
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/profile?tab=orders">
+                <ShoppingCart className="size-4" />
+                سفارش‌های من
+              </Link>
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">

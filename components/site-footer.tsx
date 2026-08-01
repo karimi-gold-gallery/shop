@@ -2,10 +2,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { Phone, MapPin, AtSign } from "lucide-react";
 
+import { getCurrentUser } from "@/lib/auth";
 import { toPersianDigits } from "@/lib/format";
 import { getShopInfo } from "@/lib/shop";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const user = await getCurrentUser();
+  const isAdmin = user?.role === "ADMIN";
   const { phone, mobile, address, instagram, slogan, experience } = getShopInfo();
 
   return (
@@ -37,8 +40,14 @@ export function SiteFooter() {
             <li><Link href="/products" className="hover:text-gold">محصولات</Link></li>
             <li><Link href="/about" className="hover:text-gold">درباره ما</Link></li>
             <li><Link href="/contact" className="hover:text-gold">تماس با ما</Link></li>
-            <li><Link href="/cart" className="hover:text-gold">سبد خرید</Link></li>
-            <li><Link href="/profile" className="hover:text-gold">پروفایل</Link></li>
+            {isAdmin ? (
+              <li><Link href="/admin" className="hover:text-gold">پنل مدیریت</Link></li>
+            ) : (
+              <>
+                <li><Link href="/cart" className="hover:text-gold">سبد خرید</Link></li>
+                <li><Link href="/profile" className="hover:text-gold">پروفایل</Link></li>
+              </>
+            )}
           </ul>
         </div>
 

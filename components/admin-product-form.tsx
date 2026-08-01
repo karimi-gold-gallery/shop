@@ -40,9 +40,17 @@ export function AdminProductForm({ categories, product }: Props) {
   const router = useRouter();
 
   function deleteImage(imageId: string) {
+    if (product && product.images.length <= 1) {
+      toast.error("حداقل یک تصویر برای محصول الزامی است");
+      return;
+    }
     startTransition(async () => {
-      await deleteProductImageAction(imageId);
-      toast.success("تصویر حذف شد");
+      const result = await deleteProductImageAction(imageId);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result?.success ?? "تصویر حذف شد");
       router.refresh();
     });
   }
@@ -129,10 +137,25 @@ export function AdminProductForm({ categories, product }: Props) {
       <div className="space-y-2">
         <Label htmlFor="images" className="flex items-center gap-2">
           <ImageIcon className="size-4" />
-          {isEdit ? "افزودن تصاویر جدید (اختیاری)" : "تصاویر محصول"}
+          {isEdit
+            ? product!.images.length === 0
+              ? "تصاویر محصول (الزامی)"
+              : "افزودن تصاویر جدید (اختیاری)"
+            : "تصاویر محصول (الزامی)"}
         </Label>
-        <Input id="images" name="images" type="file" accept="image/*" multiple />
-        <p className="text-xs text-muted-foreground">می‌توانید چند تصویر انتخاب کنید. تصاویر در پایگاه‌داده ذخیره می‌شوند.</p>
+        <Input
+          id="images"
+          name="images"
+          type="file"
+          accept="image/*"
+          multiple
+          required={!isEdit || product!.images.length === 0}
+        />
+        <p className="text-xs text-muted-foreground">
+          {isEdit
+            ? "حداقل یک تصویر باید باقی بماند. می‌توانید تصاویر جدید اضافه کنید."
+            : "حداقل یک تصویر الزامی است. می‌توانید چند تصویر انتخاب کنید."}
+        </p>
       </div>
 
       {state?.error && (

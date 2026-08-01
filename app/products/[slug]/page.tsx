@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ChevronLeft, ShoppingBag, Weight, Tag, Layers } from "lucide-react";
 
-import { getProductBySlug, getProducts, getCategories } from "@/lib/products";
+import { getProductBySlug, getProducts } from "@/lib/products";
 import { goldPriceForKarat } from "@/lib/gold-prices";
 import {
   computeBaseProductPrice,
@@ -16,10 +16,13 @@ import {
   formatToman,
   toPersianDigits,
 } from "@/lib/format";
+import { getCurrentUser } from "@/lib/auth";
 import { AddToCartButton } from "@/components/add-to-cart-button";
 import { ProductCard } from "@/components/product-card";
+import { ProductImageGallery } from "@/components/product-image-gallery";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -42,14 +45,15 @@ function safeDecodeSlug(slug: string): string {
 export default async function ProductDetailPage({ params }: Props) {
   const { slug: rawSlug } = await params;
   const slug = safeDecodeSlug(rawSlug);
-  const [product, { goldPrices, discountPercent }, categories] = await Promise.all([
+  const [product, { goldPrices, discountPercent }, user] = await Promise.all([
     getProductBySlug(slug),
     getViewerPricing(),
-    getCategories(),
+    getCurrentUser(),
   ]);
 
   if (!product || !product.active) notFound();
 
+  const isAdmin = user?.role === "ADMIN";
   const goldPrice = goldPriceForKarat(goldPrices, product.karat);
   const basePrice = computeBaseProductPrice(product.weight, product.wage, goldPrice);
   const price = computeProductPrice(
@@ -58,7 +62,6 @@ export default async function ProductDetailPage({ params }: Props) {
     goldPrice,
     discountPercent
   );
-  const mainImage = product.images[0];
 
   const related = (await getProducts({ categorySlug: product.category.slug, limit: 5 }))
     .filter((p) => p.id !== product.id)
@@ -79,30 +82,7 @@ export default async function ProductDetailPage({ params }: Props) {
       </nav>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <div className="space-y-3">
-          <div className="aspect-square overflow-hidden rounded-2xl border border-border bg-secondary/50 shadow-sm">
-            {mainImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={`/api/images/${mainImage.id}`}
-                alt={product.name}
-                className="size-full object-cover"
-              />
-            ) : (
-              <div className="grid size-full place-items-center text-muted-foreground">بدون تصویر</div>
-            )}
-          </div>
-          {product.images.length > 1 && (
-            <div className="grid grid-cols-4 gap-2">
-              {product.images.map((img) => (
-                <div key={img.id} className="aspect-square overflow-hidden rounded-lg border border-border bg-secondary/40">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/images/${img.id}`} alt={product.name} className="size-full object-cover" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <ProductImageGallery images={product.images} alt={product.name} />
 
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-2">
@@ -145,16 +125,24 @@ export default async function ProductDetailPage({ params }: Props) {
                   </p>
                 )}
               </div>
-              <AddToCartButton productId={product.id} variant="gold" size="lg" />
+              {isAdmin ? (
+                <Button asChild variant="navy" size="lg">
+                  <Link href={`/admin/products/${product.id}/edit`}>ویرایش در پنل</Link>
+                </Button>
+              ) : (
+                <AddToCartButton productId={product.id} variant="gold" size="lg" />
+              )}
             </div>
           </Card>
 
-          <div className="rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground leading-7">
-            <ShoppingBag className="size-4 text-primary inline-block ml-1" />
-            برای نهایی کردن سفارش نیازی به پرداخت آنلاین نیست. پس از ثبت سفارش، کد
-            سفارش شما صادر می‌شود؛ با تماس با گالری و اعلام کد، سفارش شما نهایی
-            و تحویل داده می‌شود.
-          </div>
+          {!isAdmin && (
+            <div className="rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground leading-7">
+              <ShoppingBag className="size-4 text-primary inline-block ml-1" />
+              برای نهایی کردن سفارش نیازی به پرداخت آنلاین نیست. پس از ثبت سفارش، کد
+              سفارش شما صادر می‌شود؛ با تماس با گالری و اعلام کد، سفارش شما نهایی
+              و تحویل داده می‌شود.
+            </div>
+          )}
         </div>
       </div>
 

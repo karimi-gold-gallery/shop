@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { cartItems, orderItems, orders } from "@/lib/db/schema";
@@ -10,6 +10,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { getGoldPrices, goldPriceForKarat } from "@/lib/gold-prices";
 import { computeProductPrice, getUserDiscountPercent } from "@/lib/pricing";
 import { generateOrderCode } from "@/lib/orders";
+
+export type CancelOrderResult =
+  | { status: "ok" }
+  | { status: "error"; message: string };
 
 export async function placeOrderAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
@@ -94,4 +98,37 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
   revalidatePath("/cart");
   revalidatePath("/profile");
   redirect(`/orders/${order.code}`);
+}
+
+/** Customers may cancel only their own pending orders. */
+export async function cancelOrderAction(orderId: string): Promise<CancelOrderResult> {
+  const user = await getCurrentUser();
+  if (!user || user.role === "ADMIN") {
+    return { status: "error", message: "برای لغو سفارش وارد شوید" };
+  }
+
+  const order = await db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.userId, user.id)),
+    columns: { id: true, status: true, code: true },
+  });
+
+  if (!order) {
+    return { status: "error", message: "سفارش یافت نشد" };
+  }
+  if (order.status !== "PENDING") {
+    return {
+      status: "error",
+      message: "فقط سفارش‌های در انتظار تماس قابل لغو هستند",
+    };
+  }
+
+  await db
+    .update(orders)
+    .set({ status: "CANCELLED" })
+    .where(eq(orders.id, order.id));
+
+  revalidatePath(`/orders/${order.code}`);
+  revalidatePath("/profile");
+  revalidatePath("/admin/orders");
+  return { status: "ok" };
 }

@@ -12,6 +12,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { countRows, db } from "@/lib/db";
 import { orders as ordersTable } from "@/lib/db/schema";
+import { redirect } from "next/navigation";
+
 import { getCurrentUser } from "@/lib/auth";
 import { getOrderItemCounts } from "@/lib/orders";
 import { toPersianDigits, formatToman, formatDateJalali } from "@/lib/format";
@@ -52,6 +54,7 @@ export default async function ProfilePage({
   searchParams: SearchParams;
 }) {
   const user = await getCurrentUser();
+  if (user?.role === "ADMIN") redirect("/admin");
   if (!user) {
     return (
       <div className="beige-texture flex flex-1 items-center justify-center px-4 py-20">

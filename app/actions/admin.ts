@@ -131,6 +131,9 @@ export async function createProductAction(
 
   const slug = slugify(parsed.data.name);
   const images = await readImages(formData);
+  if (images.length === 0) {
+    return { error: "حداقل یک تصویر برای محصول الزامی است" };
+  }
 
   try {
     await db.transaction(async (tx) => {
@@ -148,11 +151,9 @@ export async function createProductAction(
         })
         .returning({ id: products.id });
 
-      if (images.length > 0) {
-        await tx
-          .insert(productImages)
-          .values(images.map((image) => ({ ...image, productId: product!.id })));
-      }
+      await tx
+        .insert(productImages)
+        .values(images.map((image) => ({ ...image, productId: product!.id })));
     });
   } catch {
     return { error: "ایجاد محصول ناموفق بود" };
@@ -181,6 +182,10 @@ export async function updateProductAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
   const images = await readImages(formData);
+  const existingImageCount = await countRows(productImages, eq(productImages.productId, id));
+  if (existingImageCount === 0 && images.length === 0) {
+    return { error: "حداقل یک تصویر برای محصول الزامی است" };
+  }
 
   try {
     const ok = await db.transaction(async (tx) => {
@@ -224,10 +229,28 @@ export async function deleteProductAction(id: string): Promise<void> {
   revalidatePath("/products");
 }
 
-export async function deleteProductImageAction(imageId: string): Promise<void> {
+export async function deleteProductImageAction(
+  imageId: string
+): Promise<ActionState> {
   await requireAdmin();
+
+  const image = await db.query.productImages.findFirst({
+    where: eq(productImages.id, imageId),
+    columns: { id: true, productId: true },
+  });
+  if (!image) return { error: "تصویر یافت نشد" };
+
+  const imageCount = await countRows(
+    productImages,
+    eq(productImages.productId, image.productId)
+  );
+  if (imageCount <= 1) {
+    return { error: "حداقل یک تصویر برای محصول الزامی است" };
+  }
+
   await db.delete(productImages).where(eq(productImages.id, imageId));
   revalidatePath("/admin/products");
+  return { success: "تصویر حذف شد" };
 }
 
 /* ----------------------------- Orders ----------------------------- */

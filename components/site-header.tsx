@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Diamond, ShoppingBag, User } from "lucide-react";
+import { Diamond, LayoutDashboard, ShoppingBag, User } from "lucide-react";
 
 import { eq } from "drizzle-orm";
 
@@ -29,16 +29,22 @@ export async function GoldPriceStrip() {
         <span className="font-bold text-gold">
           ۲۴ عیار {toPersianDigits(formatNumber(prices[24]))} تومان
         </span>
-        <span className="hidden sm:inline text-navy-foreground/60">— قیمت‌ها به‌صورت لحظه‌ای به‌روز می‌شوند</span>
+        <span className="hidden sm:inline text-navy-foreground/60">
+          — قیمت‌ها به‌صورت لحظه‌ای به‌روز می‌شوند
+        </span>
       </div>
     </div>
   );
 }
 
 export async function SiteHeader() {
-  const [user, categories] = await Promise.all([getCurrentUser(), getCategories()]);
+  const [user, categories] = await Promise.all([
+    getCurrentUser(),
+    getCategories(),
+  ]);
+  const isAdmin = user?.role === "ADMIN";
   let cartCount = 0;
-  if (user) {
+  if (user && !isAdmin) {
     cartCount = await countRows(cartItems, eq(cartItems.userId, user.id));
   }
 
@@ -59,7 +65,9 @@ export async function SiteHeader() {
           </span>
           <span className="hidden sm:flex flex-col leading-none">
             <span className="font-bold text-lg text-navy">گالری کریمی</span>
-            <span className="text-[11px] text-muted-foreground">طلا و جواهر</span>
+            <span className="text-[11px] text-muted-foreground">
+              طلا و جواهر
+            </span>
           </span>
         </Link>
 
@@ -71,28 +79,47 @@ export async function SiteHeader() {
 
         <div className="mr-auto flex items-center gap-1.5 sm:gap-2">
           <MobileNav categories={categories} />
-          <Button asChild variant="ghost" size="icon" className="relative" aria-label="سبد خرید">
-            <Link href="/cart">
-              <ShoppingBag className="size-5" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -left-1 grid min-w-[18px] h-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-                  {toPersianDigits(cartCount)}
-                </span>
-              )}
-            </Link>
-          </Button>
+          {isAdmin ? (
+            <Button asChild variant="navy" size="sm">
+              <Link href="/admin">
+                <LayoutDashboard className="size-4" />
+                <span className="hidden sm:inline">پنل مدیریت</span>
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className="relative"
+              aria-label="سبد خرید"
+            >
+              <Link href="/cart">
+                <ShoppingBag className="size-5" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -left-1 grid min-w-[18px] h-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                    {toPersianDigits(cartCount)}
+                  </span>
+                )}
+              </Link>
+            </Button>
+          )}
 
           {user ? (
             <UserMenu user={user} />
           ) : (
-            <Button asChild variant="navy" size="sm" className="hidden sm:inline-flex">
+            <Button
+              asChild
+              variant="navy"
+              size="sm"
+              className="hidden sm:inline-flex"
+            >
               <Link href="/login">
                 <User className="size-4" />
                 ورود / ثبت‌نام
               </Link>
             </Button>
           )}
-
         </div>
       </div>
 

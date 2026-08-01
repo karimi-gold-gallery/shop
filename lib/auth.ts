@@ -90,6 +90,7 @@ export async function requireAdmin(): Promise<SafeUser> {
 
 export async function requireOnboardedUser(): Promise<SafeUser> {
   const user = await requireUser();
+  if (user.role === "ADMIN") redirect("/admin");
   if (!user.onboarded) redirect("/onboarding");
   return user;
 }

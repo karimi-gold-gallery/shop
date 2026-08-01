@@ -12,6 +12,7 @@ export type AddToCartResult = { status: "ok" } | { status: "login" };
 export async function addToCartAction(productId: string): Promise<AddToCartResult> {
   const user = await getCurrentUser();
   if (!user) return { status: "login" };
+  if (user.role === "ADMIN") return { status: "ok" };
 
   const product = await db.query.products.findFirst({
     where: eq(products.id, productId),

@@ -19,11 +19,13 @@ import { CartItemRow } from "@/components/cart-item-row";
 import { PersonalDiscountNotice } from "@/components/personal-discount-notice";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "سبد خرید" };
 
 export default async function CartPage() {
   const user = await getCurrentUser();
+  if (user?.role === "ADMIN") redirect("/admin");
 
   if (!user) {
     return (
