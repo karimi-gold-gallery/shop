@@ -121,6 +121,7 @@ export async function createProductAction(
   const parsed = productSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
+    color: formData.get("color"),
     weight: formData.get("weight"),
     karat: formData.get("karat"),
     wage: formData.get("wage"),
@@ -143,6 +144,7 @@ export async function createProductAction(
           name: parsed.data.name,
           slug,
           description: parsed.data.description || null,
+          color: parsed.data.color && parsed.data.color.trim() ? parsed.data.color.trim() : null,
           weight: parsed.data.weight,
           karat: parsed.data.karat,
           wage: parsed.data.wage,
@@ -173,6 +175,7 @@ export async function updateProductAction(
   const parsed = productSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
+    color: formData.get("color"),
     weight: formData.get("weight"),
     karat: formData.get("karat"),
     wage: formData.get("wage"),
@@ -194,6 +197,7 @@ export async function updateProductAction(
         .set({
           name: parsed.data.name,
           description: parsed.data.description || null,
+          color: parsed.data.color && parsed.data.color.trim() ? parsed.data.color.trim() : null,
           weight: parsed.data.weight,
           karat: parsed.data.karat,
           wage: parsed.data.wage,

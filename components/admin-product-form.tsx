@@ -77,6 +77,18 @@ export function AdminProductForm({ categories, product }: Props) {
           <DigitsInput id="weight" name="weight" type="text" inputMode="decimal" dir="ltr" className="text-right" defaultValue={product?.weight ?? ""} />
         </div>
         <div className="space-y-2">
+          <Label htmlFor="color">رنگ (اختیاری)</Label>
+          <Input
+            id="color"
+            name="color"
+            placeholder="مثال: طلایی، نقره‌ای، مشکی..."
+            defaultValue={product?.color ?? ""}
+          />
+          <p className="text-xs text-muted-foreground leading-4">
+            برای محصولات چندرنگ، نام محصول را برای همه‌ی واریانت‌ها یکسان بگذارید تا در صفحه جزئیات گروه‌بندی شوند.
+          </p>
+        </div>
+        <div className="space-y-2">
           <Label htmlFor="wage">اجرت ساخت (تومان)</Label>
           <DigitsInput id="wage" name="wage" type="text" digitsOnly inputMode="numeric" dir="ltr" className="text-right" defaultValue={product?.wage ?? 0} />
         </div>

@@ -33,6 +33,7 @@ const mainLinks = [
   { href: "/products", label: "محصولات" },
   { href: "/about", label: "درباره ما" },
   { href: "/contact", label: "تماس با ما" },
+  { href: "/live-prices", label: "قیمت‌های لحظه‌ای" },
 ] as const;
 
 export function DesktopNav({ categories }: { categories: Category[] }) {

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, like, or, type SQL } from "drizzle-orm";
 
-import { countRows, db } from "@/lib/db";
+import { db } from "@/lib/db";
 import { categories, products } from "@/lib/db/schema";
 import {
   goldPriceForKarat,
@@ -20,6 +20,7 @@ export const productColumns = {
   name: true,
   slug: true,
   description: true,
+  color: true,
   weight: true,
   karat: true,
   wage: true,
@@ -36,6 +37,7 @@ export type ProductCardData = {
   name: string;
   slug: string;
   description: string | null;
+  color: string | null;
   weight: number;
   karat: number;
   wage: number;
@@ -107,37 +109,64 @@ export async function getProducts(opts: {
 
   const where = buildProductWhere({ q, categorySlug, categorySlugs, onlyActive });
 
+  // Group by `name` so multiple variant rows (different color/weight) appear
+  // as a single card on listing pages.
+  const variantLimit = limit ? limit * 8 : undefined;
   const found = await db.query.products.findMany({
     where,
     columns: productColumns,
     with: {
       category: { columns: categoryColumns },
-      images: { columns: imageColumns, limit: 1 },
+      images: {
+        columns: imageColumns,
+        limit: 1,
+        orderBy: (image, { asc: ascending }) => ascending(image.createdAt),
+      },
     },
     orderBy: desc(products.createdAt),
-    limit,
+    limit: variantLimit,
   });
+
+  const groups = new Map<string, ProductCardData[]>();
+  for (const p of found) {
+    const list = groups.get(p.name) ?? [];
+    list.push(p);
+    groups.set(p.name, list);
+  }
 
   const needsPriceProcessing = goldPrices !== undefined && sort !== "newest";
 
-  if (!needsPriceProcessing) return found;
+  const groupReps = Array.from(groups.entries()).map(([name, variants]) => {
+    if (!needsPriceProcessing) {
+      const rep = variants.slice().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]!;
+      return { rep, sortValue: rep.createdAt.getTime() };
+    }
 
-  const priced = found.map((product) => ({
-    product,
-    price: computeProductPrice(
-      product.weight,
-      product.wage,
-      goldPriceForKarat(goldPrices!, product.karat)
-    ),
-  }));
+    const pricedVariants = variants.map((v) => ({
+      v,
+      price: computeProductPrice(
+        v.weight,
+        v.wage,
+        goldPriceForKarat(goldPrices!, v.karat)
+      ),
+    }));
 
-  if (sort === "price-asc") {
-    priced.sort((a, b) => a.price - b.price);
-  } else if (sort === "price-desc") {
-    priced.sort((a, b) => b.price - a.price);
-  }
+    const sorted = pricedVariants.sort((a, b) =>
+      sort === "price-asc" ? a.price - b.price : b.price - a.price
+    );
+    const rep = sorted[0]!.v;
+    const sortValue = sorted[0]!.price;
+    return { rep, sortValue };
+  });
 
-  return priced.map(({ product }) => product);
+  groupReps.sort((a, b) => {
+    if (sort === "newest") return b.sortValue - a.sortValue;
+    return sort === "price-asc" ? a.sortValue - b.sortValue : b.sortValue - a.sortValue;
+  });
+
+  const out = groupReps.map(({ rep }) => rep);
+  if (!limit) return out;
+  return out.slice(0, limit);
 }
 
 export async function getFilteredProductsPage(
@@ -151,70 +180,63 @@ export async function getFilteredProductsPage(
     categorySlugs: filters.categorySlugs,
     onlyActive: true,
   });
+  // For grouped listing we compute total + pagination in JS by grouping variants by name.
+  // This is more correct for your variant model (multiple Product rows = one visible product).
+  const all = await db.query.products.findMany({
+    where,
+    columns: productColumns,
+    with: {
+      category: { columns: categoryColumns },
+      images: {
+        columns: imageColumns,
+        limit: 1,
+        orderBy: (image, { asc: ascending }) => ascending(image.createdAt),
+      },
+    },
+  });
 
-  const total = await countRows(products, where);
-  const pagination = buildPagination(pageInput, total, pageSize);
-
-  if (total === 0) {
-    return { products: [], pagination };
+  const groups = new Map<string, ProductCardData[]>();
+  for (const p of all) {
+    const list = groups.get(p.name) ?? [];
+    list.push(p);
+    groups.set(p.name, list);
   }
 
-  let page: ProductCardData[];
-
-  if (filters.sort === "newest") {
-    page = await db.query.products.findMany({
-      where,
-      columns: productColumns,
-      with: {
-        category: { columns: categoryColumns },
-        images: { columns: imageColumns, limit: 1 },
-      },
-      orderBy: desc(products.createdAt),
-      offset: pagination.skip,
-      limit: pagination.take,
-    });
-  } else {
-    // Price sort is computed from weight/wage + live gold price — page in DB by id order after ranking.
-    const ranked = await db.query.products.findMany({
-      where,
-      columns: { id: true, weight: true, karat: true, wage: true },
-    });
-
-    ranked.sort((a, b) => {
-      const pa = computeProductPrice(
-        a.weight,
-        a.wage,
-        goldPriceForKarat(goldPrices, a.karat)
-      );
-      const pb = computeProductPrice(
-        b.weight,
-        b.wage,
-        goldPriceForKarat(goldPrices, b.karat)
-      );
-      return filters.sort === "price-asc" ? pa - pb : pb - pa;
-    });
-
-    const pageIds = ranked
-      .slice(pagination.skip, pagination.skip + pagination.take)
-      .map((p) => p.id);
-
-    if (pageIds.length === 0) {
-      return { products: [], pagination };
+  const groupReps = Array.from(groups.values()).map((variants) => {
+    if (filters.sort === "newest") {
+      const rep = variants.slice().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]!;
+      return { rep, sortValue: rep.createdAt.getTime() };
     }
 
-    const fetched = await db.query.products.findMany({
-      where: inArray(products.id, pageIds),
-      columns: productColumns,
-      with: {
-        category: { columns: categoryColumns },
-        images: { columns: imageColumns, limit: 1 },
-      },
-    });
-    const byId = new Map(fetched.map((p) => [p.id, p]));
-    page = pageIds
-      .map((id) => byId.get(id))
-      .filter((p): p is ProductCardData => Boolean(p));
-  }
+    const pricedVariants = variants.map((v) => ({
+      v,
+      price: computeProductPrice(
+        v.weight,
+        v.wage,
+        goldPriceForKarat(goldPrices, v.karat)
+      ),
+    }));
+
+    const sorted = pricedVariants.sort((a, b) =>
+      filters.sort === "price-asc" ? a.price - b.price : b.price - a.price
+    );
+    const rep = sorted[0]!.v;
+    const sortValue = sorted[0]!.price;
+    return { rep, sortValue };
+  });
+
+  groupReps.sort((a, b) => {
+    if (filters.sort === "newest") return b.sortValue - a.sortValue;
+    return filters.sort === "price-asc" ? a.sortValue - b.sortValue : b.sortValue - a.sortValue;
+  });
+
+  const totalGroups = groupReps.length;
+  const pagination = buildPagination(pageInput, totalGroups, pageSize);
+  if (totalGroups === 0) return { products: [], pagination };
+
+  const page = groupReps
+    .slice(pagination.skip, pagination.skip + pagination.take)
+    .map(({ rep }) => rep);
 
   return { products: page, pagination };
 }
@@ -231,9 +253,16 @@ export async function getFilteredProducts(
   });
 }
 
-export async function getProductBySlug(slug: string) {
-  const product = await db.query.products.findFirst({
-    where: eq(products.slug, slug),
+export async function getProductVariantsBySlug(slug: string) {
+  const primary = await db.query.products.findFirst({
+    where: and(eq(products.slug, slug), eq(products.active, true)),
+    columns: { id: true, name: true },
+  });
+
+  if (!primary) return [];
+
+  return db.query.products.findMany({
+    where: and(eq(products.name, primary.name), eq(products.active, true)),
     columns: productColumns,
     with: {
       category: { columns: categoryColumns },
@@ -242,8 +271,14 @@ export async function getProductBySlug(slug: string) {
         orderBy: (image, { asc: ascending }) => ascending(image.createdAt),
       },
     },
+    orderBy: desc(products.createdAt),
   });
-  return product ?? null;
+}
+
+/** Representative variant for legacy/metadata use-cases. */
+export async function getProductBySlug(slug: string) {
+  const variants = await getProductVariantsBySlug(slug);
+  return variants[0] ?? null;
 }
 
 export async function getCategories() {

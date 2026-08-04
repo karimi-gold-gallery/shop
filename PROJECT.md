@@ -306,8 +306,10 @@ Deleting a customer with existing orders is **blocked** (`Order.userId` is `onDe
 
 | Field | Notes |
 |-------|--------|
-| `name`, `slug` | Slug unique |
+| `name` | Group key for storefront variant grouping (color/weight) |
+| `slug` | URL identifier for a specific Product row (not a storefront grouping key) |
 | `weight` | Float, grams |
+| `color` | Optional variant attribute (multi-color products differ by this + `weight`) |
 | `karat` | Required 18 or 24; existing products backfilled to 18 |
 | `wage` | Float, تومان, default 0 |
 | `active` | Default `true`; inactive hidden from storefront |
@@ -357,6 +359,7 @@ TGJU Rial price, source timestamp, and last synchronization timestamp.
 | `/` | Home: hero, categories, featured products |
 | `/products` | Catalog with search, category filters, sort, **pagination** (`?page=`) |
 | `/products/[slug]` | Product detail + add to cart |
+| `/live-prices` | TV-friendly live prices (gold, FX, coins) |
 | `/cart` | Cart management |
 | `/checkout` | Confirm order + optional note (requires onboarded user) |
 | `/orders/[code]` | Order confirmation / detail (owner or admin) |
@@ -441,6 +444,8 @@ TGJU Rial price, source timestamp, and last synchronization timestamp.
 
 Product/category slugs: `lib/slug.ts` — slugify name + short random suffix.
 
+Storefront grouping uses `Product.name` (variants differ by `color` and `weight`), so `slug` is used only for routing to a specific Product row.
+
 Admin users UI: `components/admin-users.tsx` (`CreateUserButton`, table with edit/delete dialogs).
 
 ---
@@ -452,6 +457,7 @@ Helpers: `lib/products.ts`, `lib/product-search.ts`
 ### Storefront listing
 
 - Only **active** products by default
+- Storefront groups product variants by `Product.name`, so multiple DB rows (different `color` / `weight`) appear as **one** card on `/products`
 - URL query params: `q` (text), `category` (comma-separated slugs), `sort`, `page`
 - Changing filters rebuilds the URL **without** `page` (resets to page 1)
 - Paginated via `getFilteredProductsPage` → `{ products, pagination }`
@@ -553,7 +559,7 @@ Utilities include `.navy-gradient`, `.gold-gradient`, `.beige-texture`.
 | `onboardingSchema` | Name, birthDate, gender, phone |
 | `profileSchema` | Onboarding fields + optional national/postal/city/address |
 | `categorySchema` | Name required |
-| `productSchema` | weight > 0, wage ≥ 0, category required |
+| `productSchema` | weight > 0, wage ≥ 0, optional `color`, category required |
 | `goldPriceSchema` | price > 0 |
 | `orderStatusSchema` | `PENDING` \| `PAID` \| `FINISHED` \| `CANCELLED` |
 | `adminCreateUserSchema` | username, password, name, phone, gender, birthDate, optional city, `discountPercent` |

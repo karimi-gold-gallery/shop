@@ -116,6 +116,8 @@ export const products = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
+    /** Optional variant attribute. Multiple Product rows can share the same slug. */
+    color: text("color"),
     weight: doublePrecision("weight").notNull(),
     karat: integer("karat").default(18).notNull(),
     wage: doublePrecision("wage").default(0).notNull(),
@@ -125,7 +127,7 @@ export const products = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex("Product_slug_key").on(table.slug),
+    index("Product_slug_idx").on(table.slug),
     check("Product_karat_check", sql`${table.karat} in (18, 24)`),
     foreignKey({
       columns: [table.categoryId],

@@ -64,6 +64,7 @@ export default async function AdminProductsPage({
             <TableRow>
               <TableHead>محصول</TableHead>
               <TableHead>دسته</TableHead>
+              <TableHead>رنگ</TableHead>
               <TableHead>وزن</TableHead>
               <TableHead>قیمت</TableHead>
               <TableHead>وضعیت</TableHead>
@@ -99,6 +100,7 @@ export default async function AdminProductsPage({
                     </div>
                   </TableCell>
                   <TableCell><Badge variant="secondary">{p.category.name}</Badge></TableCell>
+                  <TableCell>{p.color ? p.color : "—"}</TableCell>
                   <TableCell>
                     {toPersianDigits(formatGram(p.weight))}
                     <span className="block text-xs text-muted-foreground">

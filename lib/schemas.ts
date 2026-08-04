@@ -71,6 +71,8 @@ export const categorySchema = z.object({
 export const productSchema = z.object({
   name: z.string().trim().min(2, "نام محصول الزامی است"),
   description: z.string().trim().optional().or(z.literal("")),
+  /** Optional variant attribute: products with the same name/slug can differ by color. */
+  color: z.string().trim().optional().or(z.literal("")),
   weight: englishNumber.pipe(z.number().positive("وزن باید بیشتر از صفر باشد")),
   karat: z.preprocess(
     (value) => Number(withEnglishDigits(value)),
