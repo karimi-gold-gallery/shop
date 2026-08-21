@@ -3,6 +3,14 @@ import type { NextRequest } from "next/server";
 
 import { isMaintenanceMode } from "@/lib/maintenance";
 
+function nextWithPathname(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const maintenanceOn = isMaintenanceMode();
@@ -11,15 +19,15 @@ export function proxy(request: NextRequest) {
     if (pathname === "/maintenance") {
       return NextResponse.redirect(new URL("/", request.url));
     }
-    return NextResponse.next();
+    return nextWithPathname(request);
   }
 
-  if (pathname === "/maintenance") {
-    return NextResponse.next();
+  if (pathname === "/maintenance" || pathname === "/floor-guide") {
+    return nextWithPathname(request);
   }
 
   if (pathname === "/api/gold-prices/sync") {
-    return NextResponse.next();
+    return nextWithPathname(request);
   }
 
   if (pathname.startsWith("/api/")) {

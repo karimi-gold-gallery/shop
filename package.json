@@ -10,10 +10,15 @@
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
     "seed:users": "tsx scripts/seed-users.ts",
-    "db:push": "drizzle-kit push",
+    "db:push": "drizzle-kit push --force",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:sync": "node scripts/sync-db-schema.mjs",
+    "db:studio": "drizzle-kit studio",
+    "db:local:up": "docker compose up -d db",
+    "db:local:down": "docker compose down",
+    "db:local:setup": "npm run db:local:up && npm run db:sync && npm run seed && npm run seed:users",
+    "prestart": "npm run db:sync"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^3.3.0",
