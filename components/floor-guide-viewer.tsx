@@ -8,11 +8,12 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import Link from "next/link";
-import { Minus, Plus, Sparkles } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 
-import { FLOOR_PLANS, type FloorId } from "@/lib/floor-guide";
+import { FLOOR_PLANS, type FloorId, type FloorPlan } from "@/lib/floor-guide";
 import { cn } from "@/lib/utils";
+
+const BRAND = "#9A1619";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
@@ -32,6 +33,49 @@ function clamp(value: number, min: number, max: number) {
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function FloorButtonText({
+  floorId,
+  shortLabel,
+}: {
+  floorId: FloorId;
+  shortLabel: string;
+}) {
+  if (floorId === "ground") return <>همکف</>;
+  return (
+    <span dir="ltr" className="inline-block">
+      {shortLabel}
+    </span>
+  );
+}
+
+function FloorButton({
+  floor,
+  isActive,
+  onSelect,
+}: {
+  floor: FloorPlan;
+  isActive: boolean;
+  onSelect: (id: FloorId) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(floor.id)}
+      aria-pressed={isActive}
+      className={cn(
+        "shrink-0 snap-center rounded-lg border px-3 py-2 text-xs font-bold transition-all min-w-11",
+        "sm:min-w-0 sm:max-w-16 sm:flex-1 sm:rounded-xl sm:px-2 sm:py-1.5 sm:text-sm",
+        isActive
+          ? "border-transparent text-white shadow-md"
+          : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300",
+      )}
+      style={isActive ? { backgroundColor: BRAND } : undefined}
+    >
+      <FloorButtonText floorId={floor.id} shortLabel={floor.shortLabel} />
+    </button>
+  );
 }
 
 export function FloorGuideViewer() {
@@ -56,9 +100,11 @@ export function FloorGuideViewer() {
     originY: number;
   } | null>(null);
   const viewRef = useRef(view);
+  const floorNavRef = useRef<HTMLElement>(null);
 
   const activeFloor =
-    FLOOR_PLANS.find((floor) => floor.id === activeId) ?? FLOOR_PLANS[2];
+    FLOOR_PLANS.find((floor) => floor.id === activeId) ??
+    FLOOR_PLANS.find((floor) => floor.id === "ground")!;
 
   useEffect(() => {
     viewRef.current = view;
@@ -84,6 +130,13 @@ export function FloorGuideViewer() {
       cancelled = true;
     };
   }, [activeFloor.image]);
+
+  useEffect(() => {
+    const nav = floorNavRef.current;
+    if (!nav) return;
+    const activeButton = nav.querySelector<HTMLElement>('[aria-pressed="true"]');
+    activeButton?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [activeId]);
 
   const selectFloor = useCallback((id: FloorId) => {
     setActiveId(id);
@@ -204,65 +257,18 @@ export function FloorGuideViewer() {
   };
 
   return (
-    <div className="beige-texture relative flex min-h-dvh flex-1 flex-col bg-background text-foreground">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "radial-gradient(ellipse 70% 50% at 50% -10%, rgba(201,161,74,0.28), transparent 55%), radial-gradient(ellipse 40% 30% at 100% 100%, rgba(1,3,78,0.08), transparent 50%)",
-        }}
-      />
-
-      <header className="relative z-20 flex items-start justify-between gap-3 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium tracking-wide text-primary sm:text-xs">
-            پاساژ دلگشا
-          </p>
-          <h1 className="mt-0.5 text-lg font-extrabold leading-snug text-balance text-navy sm:text-2xl">
-            راهنمای طبقات پاساژ دلگشا
-          </h1>
-          {/* <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            {activeFloor.label} را ببینید · انگشت دو‌تایی یا دکمه‌ها برای بزرگ‌نمایی
-          </p> */}
-        </div>
-
-        <Link
-          href="/"
-          className="animate-invite group mt-0.5 inline-flex max-w-28 shrink-0 flex-col items-center gap-1 rounded-2xl gold-gradient px-3 py-2.5 text-center text-[11px] font-extrabold leading-tight text-white shadow-[0_10px_24px_rgba(176,136,67,0.45)] ring-2 ring-gold/50 sm:max-w-none sm:flex-row sm:gap-1.5 sm:px-4 sm:text-xs"
-        >
-          <Sparkles className="size-3.5 shrink-0 text-white" />
-          <span>گالری طلای کریمی</span>
-        </Link>
+    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-white text-neutral-800">
+      <header className="relative z-20 shrink-0 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-6 sm:pb-1.5">
+        <p className="text-[10px] font-medium tracking-wide text-neutral-500 sm:text-[11px]">
+          پاساژ دلگشا
+        </p>
+        <h1 className="mt-0.5 text-base font-extrabold leading-tight text-balance text-neutral-900 sm:text-lg">
+          راهنمای طبقات پاساژ دلگشا
+        </h1>
       </header>
 
-      <div className="relative z-10 flex min-h-0 flex-1 gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 sm:gap-3 sm:px-5 sm:pb-5">
-        {/* First in RTL flex → appears on the right, matching the mall directory UI */}
-        <nav
-          aria-label="انتخاب طبقه"
-          className="flex w-19 shrink-0 flex-col gap-1.5 overflow-y-auto overscroll-contain sm:w-40 sm:gap-2"
-        >
-          {FLOOR_PLANS.map((floor) => {
-            const isActive = floor.id === activeId;
-            return (
-              <button
-                key={floor.id}
-                type="button"
-                onClick={() => selectFloor(floor.id)}
-                aria-pressed={isActive}
-                className={cn(
-                  "relative flex min-h-12.5 flex-1 items-center justify-center rounded-xl border px-1 py-1.5 text-center text-[11px] font-bold leading-tight transition-all sm:min-h-12 sm:flex-none sm:px-3 sm:text-sm",
-                  isActive
-                    ? "border-gold bg-navy text-navy-foreground shadow-[0_8px_20px_rgba(1,3,78,0.28)]"
-                    : "border-border bg-card text-navy/80 hover:border-gold/50 hover:bg-accent hover:text-navy",
-                )}
-              >
-                {floor.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gold/30 bg-navy shadow-[0_20px_50px_rgba(1,3,78,0.18)]">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-6xl sm:gap-2.5 sm:px-5 sm:pb-3">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100 shadow-sm">
           <div
             ref={viewportRef}
             className={cn(
@@ -278,8 +284,11 @@ export function FloorGuideViewer() {
             aria-label={`نقشه ${activeFloor.label}`}
           >
             {!imageReady && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-navy">
-                <div className="size-9 animate-pulse rounded-full border-2 border-gold/30 border-t-gold" />
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-100">
+                <div
+                  className="size-9 animate-pulse rounded-full border-2 border-neutral-200"
+                  style={{ borderTopColor: BRAND }}
+                />
               </div>
             )}
 
@@ -302,31 +311,66 @@ export function FloorGuideViewer() {
             />
           </div>
 
-          <div className="absolute inset-e-3 bottom-3 z-20 flex flex-col overflow-hidden rounded-xl border border-gold/30 bg-card/90 shadow-lg backdrop-blur-md">
+          <div className="absolute inset-e-2 bottom-2 z-20 flex flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-md sm:inset-e-3 sm:bottom-3 sm:rounded-xl">
             <button
               type="button"
               onClick={() => zoomBy(ZOOM_STEP)}
               disabled={view.scale >= MAX_SCALE}
-              className="flex size-11 items-center justify-center text-navy transition-colors hover:bg-accent active:bg-gold/20 disabled:pointer-events-none disabled:opacity-35"
+              className="flex size-10 items-center justify-center transition-colors hover:bg-neutral-50 active:bg-neutral-100 disabled:pointer-events-none disabled:opacity-35 sm:size-11"
+              style={{ color: BRAND }}
               aria-label="بزرگ‌نمایی"
             >
-              <Plus className="size-5" />
+              <Plus className="size-4 sm:size-5" />
             </button>
-            <div className="h-px bg-border" />
+            <div className="h-px bg-neutral-200" />
             <button
               type="button"
               onClick={() => zoomBy(-ZOOM_STEP)}
               disabled={view.scale <= MIN_SCALE}
-              className="flex size-11 items-center justify-center text-navy transition-colors hover:bg-accent active:bg-gold/20 disabled:pointer-events-none disabled:opacity-35"
+              className="flex size-10 items-center justify-center transition-colors hover:bg-neutral-50 active:bg-neutral-100 disabled:pointer-events-none disabled:opacity-35 sm:size-11"
+              style={{ color: BRAND }}
               aria-label="کوچک‌نمایی"
             >
-              <Minus className="size-5" />
+              <Minus className="size-4 sm:size-5" />
             </button>
           </div>
 
-          <div className="pointer-events-none absolute inset-s-3 top-3 rounded-lg gold-gradient px-2.5 py-1 text-xs font-bold text-white shadow-md sm:text-sm">
+          <div
+            className="pointer-events-none absolute inset-s-2 top-2 rounded-md px-2 py-0.5 text-[11px] font-bold text-white shadow-md sm:inset-s-3 sm:top-3 sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-xs"
+            style={{ backgroundColor: BRAND }}
+          >
             {activeFloor.label}
           </div>
+        </div>
+
+        <div className="relative shrink-0" dir="ltr">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white via-white/80 to-transparent sm:hidden"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-white via-white/80 to-transparent sm:hidden"
+          />
+
+          <nav
+            ref={floorNavRef}
+            aria-label="انتخاب طبقه"
+            className="flex gap-1.5 overflow-x-auto overscroll-x-contain scroll-smooth px-3 pb-0.5 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-center sm:overflow-x-visible sm:px-0 sm:pb-0 sm:snap-none"
+          >
+            {FLOOR_PLANS.map((floor) => (
+              <FloorButton
+                key={floor.id}
+                floor={floor}
+                isActive={floor.id === activeId}
+                onSelect={selectFloor}
+              />
+            ))}
+          </nav>
+
+          <p className="mt-1 text-center text-[10px] text-neutral-400 sm:hidden">
+            برای دیدن همه طبقات، انگشت را بکشید
+          </p>
         </div>
       </div>
     </div>

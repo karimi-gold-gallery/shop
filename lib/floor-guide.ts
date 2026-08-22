@@ -16,69 +16,77 @@ export type FloorPlan = {
   image: string;
 };
 
-/** Floors ordered top → bottom (+2 … −6), matching the mall directory. */
-export const FLOOR_PLANS: FloorPlan[] = [
-  {
-    id: "plus-2",
-    label: "طبقه دوم",
-    shortLabel: "+۲",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Mosbat-21.jpg",
-  },
-  {
-    id: "plus-1",
-    label: "طبقه اول",
-    shortLabel: "+۱",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Mosbat-11.jpg",
-  },
-  {
-    id: "ground",
-    label: "همکف",
-    shortLabel: "۰",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Hamkaf.jpg",
-  },
-  {
-    id: "minus-1",
-    label: "منفی ۱",
-    shortLabel: "−۱",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-1.jpg",
-  },
-  {
-    id: "minus-2",
-    label: "منفی ۲",
-    shortLabel: "−۲",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-21.jpg",
-  },
-  {
-    id: "minus-3",
-    label: "منفی ۳",
-    shortLabel: "−۳",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-31.jpg",
-  },
-  {
-    id: "minus-4",
-    label: "منفی ۴",
-    shortLabel: "−۴",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-41.jpg",
-  },
-  {
-    id: "minus-5",
-    label: "منفی ۵",
-    shortLabel: "−۵",
-    image:
-      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-51.jpg",
-  },
-  {
-    id: "minus-6",
+const FLOOR_DATA: Record<FloorId, Omit<FloorPlan, "id">> = {
+  "minus-6": {
     label: "منفی ۶",
-    shortLabel: "−۶",
+    shortLabel: "-6",
     image:
       "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-61.jpg",
   },
+  "minus-5": {
+    label: "منفی ۵",
+    shortLabel: "-5",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-51.jpg",
+  },
+  "minus-4": {
+    label: "منفی ۴",
+    shortLabel: "-4",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-41.jpg",
+  },
+  "minus-3": {
+    label: "منفی ۳",
+    shortLabel: "-3",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-31.jpg",
+  },
+  "minus-2": {
+    label: "منفی ۲",
+    shortLabel: "-2",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-21.jpg",
+  },
+  "minus-1": {
+    label: "منفی ۱",
+    shortLabel: "-1",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Manfi-1.jpg",
+  },
+  ground: {
+    label: "همکف",
+    shortLabel: "همکف",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Hamkaf.jpg",
+  },
+  "plus-1": {
+    label: "طبقه اول",
+    shortLabel: "+1",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Mosbat-11.jpg",
+  },
+  "plus-2": {
+    label: "طبقه دوم",
+    shortLabel: "+2",
+    image:
+      "https://delgosha-mall.ir/wp-content/uploads/2023/02/tabaghe-Mosbat-21.jpg",
+  },
+};
+
+/** Display order: −6 … همکف … +2 */
+export const FLOOR_ORDER: FloorId[] = [
+  "minus-6",
+  "minus-5",
+  "minus-4",
+  "minus-3",
+  "minus-2",
+  "minus-1",
+  "ground",
+  "plus-1",
+  "plus-2",
 ];
+
+export const FLOOR_PLANS: FloorPlan[] = FLOOR_ORDER.map((id) => ({
+  id,
+  ...FLOOR_DATA[id],
+}));
