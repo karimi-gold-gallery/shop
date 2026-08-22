@@ -368,9 +368,6 @@ export function FloorGuideViewer() {
             ))}
           </nav>
 
-          <p className="mt-1 text-center text-[10px] text-neutral-400 sm:hidden">
-            برای دیدن همه طبقات، انگشت را بکشید
-          </p>
         </div>
       </div>
     </div>
